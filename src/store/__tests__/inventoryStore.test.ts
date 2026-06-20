@@ -42,6 +42,8 @@ function seedLocation() {
       },
     ],
     unknownBarcodes: [],
+    sessionScans: [],
+    sessionUnknownBarcodes: [],
   });
 }
 
@@ -60,6 +62,15 @@ describe('markDone', () => {
     expect(saveDoneState).toHaveBeenCalledTimes(1);
   });
 
+  it('appends to sessionScans', async () => {
+    useInventoryStore.getState().markDone('012345', 'warehouse-a');
+    await flush();
+
+    expect(useInventoryStore.getState().sessionScans).toEqual([
+      { barcode: '012345', locationId: 'warehouse-a', name: 'Widget' },
+    ]);
+  });
+
   it('is a no-op when the item is already done', async () => {
     useInventoryStore.getState().markDone('012345', 'warehouse-a');
     await flush();
@@ -69,6 +80,7 @@ describe('markDone', () => {
     await flush();
 
     expect(saveDoneState).not.toHaveBeenCalled();
+    expect(useInventoryStore.getState().sessionScans).toHaveLength(1);
   });
 });
 
@@ -82,6 +94,15 @@ describe('recordUnknownBarcode', () => {
     ]);
   });
 
+  it('appends to sessionUnknownBarcodes', async () => {
+    useInventoryStore.getState().recordUnknownBarcode('999999999999', 'warehouse-a');
+    await flush();
+
+    expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([
+      { barcode: '999999999999', locationId: 'warehouse-a' },
+    ]);
+  });
+
   it('does not duplicate the same barcode+location', async () => {
     useInventoryStore.getState().recordUnknownBarcode('999999999999', 'warehouse-a');
     await flush();
@@ -89,6 +110,7 @@ describe('recordUnknownBarcode', () => {
     await flush();
 
     expect(useInventoryStore.getState().unknownBarcodes).toHaveLength(1);
+    expect(useInventoryStore.getState().sessionUnknownBarcodes).toHaveLength(1);
   });
 });
 

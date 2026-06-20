@@ -22,18 +22,6 @@ When updating master file
 4. users to login via google auth
 5. updated at timestamp + user's name
 
-UI changes:
-1. Landing page central logo image (circular, placeholder)
-2. goes into a page with a dropdown of which location
-3. upon selecting location, go into a page with just the location items
-   a. there should be a dropdown on top to change location
-   b. bottom button to open barcode scanner
-   c. bottom button to finish / generate report
-4. Report screen
-   a. contain all the changes made in this session
-   b. submit / print / cancel buttons
-   c. submit updates master file in google drive
-
 gdrive integration
 1. user should login to their own gmail for auth, and access the specific shared file on their drive
 

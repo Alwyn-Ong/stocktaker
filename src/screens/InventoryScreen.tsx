@@ -6,12 +6,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
 import ItemRow from '../components/ItemRow';
+import LocationDropdown from '../components/LocationDropdown';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Inventory'>;
 
 export default function InventoryScreen({ navigation, route }: Props) {
   const { locationId } = route.params;
   const locations = useInventoryStore(s => s.locations);
+  const setCurrentLocation = useInventoryStore(s => s.setCurrentLocation);
   const location = locations.find(l => l.id === locationId);
 
   if (!location) {
@@ -22,8 +24,10 @@ export default function InventoryScreen({ navigation, route }: Props) {
     );
   }
 
-  const done = location.items.filter(i => i.done).length;
-  const total = location.items.length;
+  function handleSwitchLocation(id: string) {
+    setCurrentLocation(id);
+    navigation.setParams({ locationId: id });
+  }
 
   return (
     <View style={styles.container}>
@@ -31,10 +35,11 @@ export default function InventoryScreen({ navigation, route }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>{'← Back'}</Text>
         </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.title}>{location.name}</Text>
-          <Text style={styles.progress}>{done}/{total} done</Text>
-        </View>
+        <LocationDropdown
+          locations={locations}
+          selectedId={locationId}
+          onSelect={handleSwitchLocation}
+        />
       </View>
 
       <FlatList
@@ -43,12 +48,20 @@ export default function InventoryScreen({ navigation, route }: Props) {
         renderItem={({ item }) => <ItemRow item={item} />}
       />
 
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('Scanner', { locationId })}
-      >
-        <Text style={styles.fabText}>Scan</Text>
-      </TouchableOpacity>
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={[styles.bottomBtn, styles.scanBtn]}
+          onPress={() => navigation.navigate('Scanner', { locationId })}
+        >
+          <Text style={styles.bottomBtnText}>Scan</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.bottomBtn, styles.reportBtn]}
+          onPress={() => navigation.navigate('Report')}
+        >
+          <Text style={styles.bottomBtnText}>Finish / Generate Report</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -63,27 +76,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    gap: 12,
   },
-  backBtn: { marginBottom: 8 },
+  backBtn: {},
   backText: { color: '#4CAF50', fontSize: 15 },
-  headerInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a' },
-  progress: { fontSize: 14, color: '#666' },
-  fab: {
-    position: 'absolute',
-    bottom: 32,
-    right: 24,
-    backgroundColor: '#4CAF50',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+  bottomBar: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
-  fabText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  bottomBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  scanBtn: { backgroundColor: '#4CAF50' },
+  reportBtn: { backgroundColor: '#1565C0' },
+  bottomBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

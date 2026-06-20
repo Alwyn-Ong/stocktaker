@@ -15,3 +15,9 @@ export type UnknownBarcode = {
   barcode: string;
   locationId: string;
 };
+
+export type SessionScan = {
+  barcode: string;
+  locationId: string;
+  name: string;
+};

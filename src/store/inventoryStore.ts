@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as DocumentPicker from 'expo-document-picker';
-import { Location, UnknownBarcode } from '../types';
+import { Location, UnknownBarcode, SessionScan } from '../types';
 import { loadCSV, exportReport, parseCSV, serializeReport } from '../services/csvService';
 import {
   loadDoneState, saveDoneState, makeKey,
@@ -18,6 +18,8 @@ type InventoryStore = {
   loading: boolean;
   error: string | null;
   unknownBarcodes: UnknownBarcode[];
+  sessionScans: SessionScan[];
+  sessionUnknownBarcodes: UnknownBarcode[];
 
   backend: StorageBackend;
   driveFileId: string | null;
@@ -45,6 +47,8 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   loading: false,
   error: null,
   unknownBarcodes: [],
+  sessionScans: [],
+  sessionUnknownBarcodes: [],
 
   backend: 'local',
   driveFileId: null,
@@ -114,7 +118,7 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
         items: l.items.map(i => i.barcode === barcode ? { ...i, done: true } : i),
       };
     });
-    set({ locations });
+    set({ locations, sessionScans: [...get().sessionScans, { barcode, locationId, name: item.name }] });
 
     loadDoneState().then(doneState => {
       const key = makeKey(barcode, locationId);
@@ -124,11 +128,11 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   },
 
   recordUnknownBarcode: (barcode: string, locationId: string) => {
-    const { unknownBarcodes } = get();
+    const { unknownBarcodes, sessionUnknownBarcodes } = get();
     if (unknownBarcodes.some(u => u.barcode === barcode && u.locationId === locationId)) return;
 
     const next = [...unknownBarcodes, { barcode, locationId }];
-    set({ unknownBarcodes: next });
+    set({ unknownBarcodes: next, sessionUnknownBarcodes: [...sessionUnknownBarcodes, { barcode, locationId }] });
 
     loadUnknownBarcodes().then(state => {
       state[makeKey(barcode, locationId)] = { barcode, locationId };

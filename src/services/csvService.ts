@@ -9,6 +9,7 @@ type CSVRow = {
   Barcode: string;
   'Item Name': string;
   Quantity: string;
+  Description?: string;
 };
 
 export async function loadCSV(uri?: string): Promise<Location[]> {
@@ -22,6 +23,7 @@ export async function loadCSV(uri?: string): Promise<Location[]> {
     const name = row.Location?.trim();
     const barcode = row.Barcode?.trim();
     const itemName = row['Item Name']?.trim();
+    const description = row.Description?.trim() ?? '';
     const quantity = parseInt(row.Quantity?.trim() ?? '0', 10);
 
     if (!name || !barcode || !itemName) continue;
@@ -34,6 +36,7 @@ export async function loadCSV(uri?: string): Promise<Location[]> {
     locationMap.get(id)!.items.push({
       barcode,
       name: itemName,
+      description,
       quantity: isNaN(quantity) ? 0 : quantity,
       scannedCount: 0,
       done: false,
@@ -44,7 +47,7 @@ export async function loadCSV(uri?: string): Promise<Location[]> {
 }
 
 export async function exportReport(locations: Location[]): Promise<void> {
-  const rows: string[][] = [['Location', 'Barcode', 'Item Name', 'Quantity', 'Status']];
+  const rows: string[][] = [['Location', 'Barcode', 'Item Name', 'Description', 'Quantity', 'Status']];
 
   for (const loc of locations) {
     for (const item of loc.items) {
@@ -52,6 +55,7 @@ export async function exportReport(locations: Location[]): Promise<void> {
         loc.name,
         item.barcode,
         item.name,
+        item.description,
         String(item.quantity),
         item.done ? 'Done' : 'Pending',
       ]);

@@ -1,0 +1,16 @@
+Location,Barcode,Item Name,Quantity,Description
+Warehouse A,012345678905,Widget Small,24,Compact widget for small parts bins
+Warehouse A,012345678912,Widget Medium,10,Standard widget for general use
+Warehouse B,111222333445,Bolt 10mm,500,Zinc-plated steel bolt
+Warehouse A,012345678929,Widget Large,5,Heavy-duty widget for large assemblies
+Warehouse A,099887766554,"Gizmo, Deluxe",3,"Deluxe gizmo, gift wrapped"
+Warehouse B,111222333446,Bolt 12mm,0,Zinc-plated steel bolt
+Warehouse B,111222333447,Washer Pack,abc,
+Warehouse B,,Missing Barcode Item,10,Item used to test missing barcode handling
+,111222333448,Missing Location Item,10,Item used to test missing location handling
+Receiving Dock,222333444556,Pallet Wrap,12,Stretch wrap for pallets
+Receiving Dock,222333444556,Pallet Wrap (dup barcode),8,Duplicate barcode test item
+receiving dock,222333444557,Tape Roll,20,Roll of clear packing tape
+Warehouse A,  012345678936 , Widget XL ,7,  Oversized widget variant
+Warehouse B,111222333449,Negative Stock Test,-3,Test item with negative stock count
+Warehouse B,111222333450,Item No Quantity

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { BarCodeScanner, BarCodeScannerResult } from 'expo-barcode-scanner';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
@@ -9,7 +9,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 
 export default function ScannerScreen({ navigation, route }: Props) {
   const { locationId } = route.params;
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
   const cooldown = useRef(false);
 
@@ -17,17 +17,16 @@ export default function ScannerScreen({ navigation, route }: Props) {
   const location = locations.find(l => l.id === locationId);
 
   useEffect(() => {
-    BarCodeScanner.requestPermissionsAsync().then(({ status }) => {
-      setHasPermission(status === 'granted');
-    });
-  }, []);
+    if (!permission) return;
+    if (!permission.granted) requestPermission();
+  }, [permission]);
 
   function showToast(message: string, color: string) {
     setToast({ message, color });
     setTimeout(() => setToast(null), 2000);
   }
 
-  function handleBarCodeScanned({ data }: BarCodeScannerResult) {
+  function handleBarCodeScanned({ data }: BarcodeScanningResult) {
     if (cooldown.current) return;
     cooldown.current = true;
     setTimeout(() => { cooldown.current = false; }, 2500);
@@ -48,17 +47,17 @@ export default function ScannerScreen({ navigation, route }: Props) {
     showToast(`✓ ${item.name}`, '#4CAF50');
   }
 
-  if (hasPermission === null) {
+  if (!permission) {
     return <View style={styles.center}><Text>Requesting camera permission…</Text></View>;
   }
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return <View style={styles.center}><Text>Camera permission denied.</Text></View>;
   }
 
   return (
     <View style={styles.container}>
-      <BarCodeScanner
-        onBarCodeScanned={handleBarCodeScanned}
+      <CameraView
+        onBarcodeScanned={handleBarCodeScanned}
         style={StyleSheet.absoluteFill}
       />
 

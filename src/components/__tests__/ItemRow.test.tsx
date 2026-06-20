@@ -8,8 +8,6 @@ function makeItem(overrides: Partial<Item> = {}): Item {
     barcode: '012345',
     name: 'Widget',
     description: '',
-    quantity: 5,
-    scannedCount: 0,
     done: false,
     ...overrides,
   };

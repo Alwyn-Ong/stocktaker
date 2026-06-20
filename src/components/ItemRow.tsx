@@ -13,7 +13,6 @@ export default function ItemRow({ item }: Props) {
         <Text style={styles.barcode}>{item.barcode}</Text>
       </View>
       <View style={styles.right}>
-        <Text style={styles.qty}>Qty: {item.quantity}</Text>
         {item.done && <Text style={styles.check}>✓</Text>}
       </View>
     </View>
@@ -38,6 +37,5 @@ const styles = StyleSheet.create({
   description: { fontSize: 13, color: '#666', marginTop: 2 },
   barcode: { fontSize: 12, color: '#aaa', marginTop: 2 },
   right: { alignItems: 'flex-end' },
-  qty: { fontSize: 13, color: '#666' },
   check: { fontSize: 18, color: '#4CAF50', fontWeight: '700' },
 });

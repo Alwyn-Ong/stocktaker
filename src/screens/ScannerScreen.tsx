@@ -13,7 +13,7 @@ export default function ScannerScreen({ navigation, route }: Props) {
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
   const cooldown = useRef(false);
 
-  const { locations, markDone } = useInventoryStore();
+  const { locations, markDone, recordUnknownBarcode } = useInventoryStore();
   const location = locations.find(l => l.id === locationId);
 
   useEffect(() => {
@@ -35,6 +35,7 @@ export default function ScannerScreen({ navigation, route }: Props) {
 
     const item = location.items.find(i => i.barcode === data);
     if (!item) {
+      recordUnknownBarcode(data, locationId);
       showToast(`Unknown barcode: ${data}`, '#f44336');
       return;
     }

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, BackHandler,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
@@ -11,11 +11,25 @@ import LocationCard from '../components/LocationCard';
 type Props = NativeStackScreenProps<RootStackParamList, 'Locations'>;
 
 export default function LocationsScreen({ navigation }: Props) {
-  const { locations, loading, error, loadFromCSV, pickAndLoadCSV, setCurrentLocation, generateReport } =
+  const { locations, loading, error, loadFromCSV, pickAndLoadCSV, setCurrentLocation, generateReport, hydrateSettings } =
     useInventoryStore();
 
   useEffect(() => {
-    loadFromCSV(); // try default path on mount
+    (async () => {
+      await hydrateSettings();
+      await loadFromCSV(); // try default path/file on mount
+    })();
+  }, []);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      Alert.alert('Exit app?', 'Are you sure you want to exit Stocktaker?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
+      ]);
+      return true;
+    });
+    return () => subscription.remove();
   }, []);
 
   function handleLocationPress(locationId: string) {
@@ -43,9 +57,14 @@ export default function LocationsScreen({ navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.headerBar}>
         <Text style={styles.title}>Locations</Text>
-        <TouchableOpacity onPress={handleImport} style={styles.importBtn}>
-          <Text style={styles.importBtnText}>Import CSV</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handleImport} style={styles.importBtn}>
+            <Text style={styles.importBtnText}>Import CSV</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.settingsBtn}>
+            <Text style={styles.settingsBtnText}>⚙</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading && <ActivityIndicator style={styles.loader} size="large" color="#4CAF50" />}
@@ -96,6 +115,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   importBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  settingsBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#eee',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsBtnText: { fontSize: 18 },
   loader: { marginTop: 40 },
   list: { paddingVertical: 8 },
   emptyState: { alignItems: 'center', marginTop: 80 },

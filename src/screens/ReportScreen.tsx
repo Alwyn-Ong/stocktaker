@@ -22,8 +22,8 @@ export default function ReportScreen({ navigation }: Props) {
       Alert.alert('Report submitted', 'The master file has been updated.', [
         { text: 'OK', onPress: () => navigation.navigate('Landing') },
       ]);
-    } catch {
-      Alert.alert('Error', 'Could not generate report.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Could not generate report.');
     } finally {
       setBusy(false);
     }

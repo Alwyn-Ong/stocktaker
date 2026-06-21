@@ -1,21 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Alert,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
-import { listCSVFiles, DriveFile } from '../services/googleDriveService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const {
-    backend, driveFileId, driveFileName, driveConnected,
-    setBackend, connectDrive, disconnectDrive, selectDriveFile, hydrateSettings,
+    backend, driveConnected, displayName,
+    setBackend, connectDrive, disconnectDrive, hydrateSettings,
   } = useInventoryStore();
 
-  const [files, setFiles] = useState<DriveFile[] | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -24,7 +22,6 @@ export default function SettingsScreen({ navigation }: Props) {
 
   async function handleSelectLocal() {
     await setBackend('local');
-    setFiles(null);
   }
 
   async function handleSelectDrive() {
@@ -35,7 +32,6 @@ export default function SettingsScreen({ navigation }: Props) {
     setBusy(true);
     try {
       await connectDrive();
-      await fetchFiles();
     } catch (e: any) {
       Alert.alert('Connection failed', e?.message ?? 'Could not connect to Google Drive.');
     } finally {
@@ -43,33 +39,8 @@ export default function SettingsScreen({ navigation }: Props) {
     }
   }
 
-  async function fetchFiles() {
-    setBusy(true);
-    try {
-      const result = await listCSVFiles();
-      setFiles(result);
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Could not list Drive files.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handlePickFile(file: DriveFile) {
-    setBusy(true);
-    try {
-      await selectDriveFile(file.id, file.name);
-      setFiles(null);
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Could not select file.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleDisconnect() {
     await disconnectDrive();
-    setFiles(null);
   }
 
   return (
@@ -108,35 +79,14 @@ export default function SettingsScreen({ navigation }: Props) {
               </TouchableOpacity>
             )}
 
-            {!busy && driveConnected && driveFileId && !files && (
+            {!busy && driveConnected && (
               <>
-                <Text style={styles.fileLabel}>Active file: {driveFileName}</Text>
-                <TouchableOpacity style={styles.actionBtn} onPress={fetchFiles}>
-                  <Text style={styles.actionBtnText}>Change file</Text>
-                </TouchableOpacity>
+                <Text style={styles.fileLabel}>
+                  {displayName ? `Signed in as ${displayName}` : 'Signed in (name unavailable — reconnect to refresh)'}
+                </Text>
                 <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
                   <Text style={styles.disconnectBtnText}>Disconnect</Text>
                 </TouchableOpacity>
-              </>
-            )}
-
-            {!busy && driveConnected && (!driveFileId || files) && (
-              <>
-                <Text style={styles.fileLabel}>Choose a CSV file:</Text>
-                <FlatList
-                  data={files ?? []}
-                  keyExtractor={f => f.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.fileRow} onPress={() => handlePickFile(item)}>
-                      <Text style={styles.fileRowText}>{item.name}</Text>
-                    </TouchableOpacity>
-                  )}
-                  ListEmptyComponent={
-                    <TouchableOpacity style={styles.actionBtn} onPress={fetchFiles}>
-                      <Text style={styles.actionBtnText}>Load files</Text>
-                    </TouchableOpacity>
-                  }
-                />
               </>
             )}
           </View>
@@ -186,11 +136,4 @@ const styles = StyleSheet.create({
   disconnectBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
   disconnectBtnText: { color: '#f44336', fontWeight: '600', fontSize: 15 },
   fileLabel: { fontSize: 14, color: '#555', marginBottom: 8 },
-  fileRow: {
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 8,
-    marginBottom: 6,
-  },
-  fileRowText: { fontSize: 15, color: '#1a1a1a' },
 });

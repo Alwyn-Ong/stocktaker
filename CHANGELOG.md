@@ -3,7 +3,11 @@
 ## Unreleased
 
 ### Added
-- Google Drive storage backend: connect/disconnect, file picker, and a Settings screen for choosing between local and Drive storage.
+- Google Drive storage backend: connect/disconnect against one locked master Google Sheet (id configured via `GOOGLE_MASTER_SHEET_ID` in `.env.local`), and a Settings screen for choosing between local and Drive storage.
+- `googleSheetsService`: reads/writes the master sheet via the Sheets API v4 REST endpoints (`spreadsheets.get`, `values.get`, `values:batchUpdate`), with header-name-driven column lookup.
+- `googleAuthService` exposes the signed-in Google account's display name (from the native sign-in result) for use as the "Updated By" value.
+- Submitting a report against the Drive backend stamps "Updated At"/"Updated By" columns on each scanned item's row in the master sheet, rather than overwriting the whole file.
+- `Item.rowIndex`: optional field set by the Drive backend to track which sheet row an item came from.
 - Unknown-barcode capture: barcodes scanned that aren't in the master list are persisted and listed in a separate "Unknown Barcodes" section of the generated report.
 - Confirmation dialog when pressing the Android hardware back button on the Landing screen (app exit).
 - `LandingScreen` (new root route): circular logo placeholder, "Continue" button, and Settings access.
@@ -19,7 +23,15 @@
 - Navigation flow changed from a single location-list root screen to `Landing → LocationPicker → Inventory ⇄ Scanner`, with `Report` reachable from `Inventory`.
 - `InventoryScreen` header now shows an inline `LocationDropdown` for switching locations in place (no back navigation) instead of a static location name; the circular "Scan" FAB was replaced by a two-button bottom bar ("Scan" and "Finish / Generate Report").
 - "Generate Report" no longer runs immediately from the location list; it now navigates to `ReportScreen`, whose Submit button calls the existing `generateReport()`.
+- `ReportScreen`'s Submit failure alert now shows the specific error message instead of a generic failure string.
+- `SettingsScreen`'s Drive section shows "Signed in as {name}" instead of an active-file label.
+- Replaced `app.json` with `app.config.js`, which reads the Android `package` name and `extra.google*` values from gitignored `.env.local` (see `.env.local.example`) via Expo's built-in dotenv support, instead of hardcoding them in a committed file.
+- `googleAuthService` now uses `@react-native-google-signin/google-signin` (native Android Credential Manager flow) instead of `expo-auth-session`'s browser-based authorization-code flow. Google's authorization server rejects custom-scheme `redirect_uri` values (e.g. `stocktaker://`) for "Android" type OAuth clients with `Error 400: invalid_request`, and Expo itself deprecated Google support in `expo-auth-session` as of SDK 49. The native library re-uses the same Android OAuth client (validated by package name + SHA-1, already configured) with no redirect URI involved.
+- OAuth scope narrowed from `https://www.googleapis.com/auth/drive` to `https://www.googleapis.com/auth/spreadsheets`, matching the Sheets-only API surface actually used (also a lower Google verification tier: "sensitive" rather than "restricted").
+- `app.config.js`: dropped the now-unused `scheme`/`GOOGLE_ANDROID_CLIENT_ID` config and the `expo-web-browser`/`expo-secure-store` plugins; added `ios.bundleIdentifier` (required by the new plugin's prebuild step) and the `@react-native-google-signin/google-signin` plugin.
+- `generateReport()` now clears `sessionScans`/`sessionUnknownBarcodes` after a successful submit (either backend); previously they were never cleared until app restart, so the Report screen kept showing already-submitted items. Still preserved on a failed submit, so the user can retry without re-scanning.
 
 ### Removed
 - "Qty: N" display from inventory item rows.
 - `LocationsScreen` and its `FlatList` of `LocationCard` rows (superseded by `LandingScreen` + `LocationPickerScreen`).
+- `googleDriveService.ts` and the Drive file browse/pick UI in `SettingsScreen` (superseded by `googleSheetsService` and the locked master sheet config). `driveFileId`/`driveFileName` removed from `Settings`.

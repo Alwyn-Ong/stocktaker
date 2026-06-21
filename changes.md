@@ -18,11 +18,20 @@ Generated file
    - Unrecognized scans are persisted and appended as an "Unknown Barcodes"
      section (Location, Barcode) at the end of the generated report.
 
-When updating master file
-4. users to login via google auth
-5. updated at timestamp + user's name
 
-gdrive integration
-1. user should login to their own gmail for auth, and access the specific shared file on their drive
+Add a date and time at the bottom of the generated report
+Add the name: "Checked by: "
+For the "Unknown Barcodes" string in the report, add it to "Unknown barcodes - not in master list"
+For the checked items, add a "Items Present" on top
 
- 
+For the google drive in settings, move it to tot main page beside continue. 
+
+generate a user manual. update claude to update the user manual on every change if necessary.
+
+also push up the buttons like scan and finish/ generate report, it seems to be clashing with my phone's back / change app button
+
+update the app name and the app icon and main page icon to the private branding do NOT commit this. 
+
+change the app name to also come from env var
+
+also, changes the timestamps to GMT+8 / UTC+8

@@ -1,15 +1,18 @@
 import { create } from 'zustand';
 import * as DocumentPicker from 'expo-document-picker';
+import Constants from 'expo-constants';
 import { Location, UnknownBarcode, SessionScan } from '../types';
-import { loadCSV, exportReport, parseCSV, serializeReport } from '../services/csvService';
+import { loadCSV, exportReport } from '../services/csvService';
 import {
   loadDoneState, saveDoneState, makeKey,
   loadUnknownBarcodes, saveUnknownBarcodes,
   loadSettings, saveSettings, StorageBackend,
 } from '../services/storageService';
 import * as googleAuthService from '../services/googleAuthService';
-import * as googleDriveService from '../services/googleDriveService';
+import * as googleSheetsService from '../services/googleSheetsService';
 import { DEFAULT_CSV_PATH } from '../constants';
+
+const MASTER_SHEET_ID: string = Constants.expoConfig?.extra?.googleMasterSheetId ?? '';
 
 type InventoryStore = {
   locations: Location[];
@@ -22,9 +25,9 @@ type InventoryStore = {
   sessionUnknownBarcodes: UnknownBarcode[];
 
   backend: StorageBackend;
-  driveFileId: string | null;
-  driveFileName: string | null;
   driveConnected: boolean;
+  displayName: string | null;
+  sheetSchema: googleSheetsService.SheetSchema | null;
 
   hydrateSettings: () => Promise<void>;
   loadFromCSV: (uri?: string) => Promise<void>;
@@ -37,7 +40,6 @@ type InventoryStore = {
   setBackend: (backend: StorageBackend) => Promise<void>;
   connectDrive: () => Promise<void>;
   disconnectDrive: () => Promise<void>;
-  selectDriveFile: (fileId: string, fileName: string) => Promise<void>;
 };
 
 export const useInventoryStore = create<InventoryStore>((set, get) => ({
@@ -51,32 +53,33 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   sessionUnknownBarcodes: [],
 
   backend: 'local',
-  driveFileId: null,
-  driveFileName: null,
   driveConnected: false,
+  displayName: null,
+  sheetSchema: null,
 
   hydrateSettings: async () => {
     const settings = await loadSettings();
     const driveConnected = await googleAuthService.isSignedIn();
+    const displayName = driveConnected ? await googleAuthService.getDisplayName() : null;
     set({
       backend: settings.backend,
-      driveFileId: settings.driveFileId,
-      driveFileName: settings.driveFileName,
       driveConnected,
+      displayName,
     });
   },
 
   loadFromCSV: async (uri?: string) => {
     set({ loading: true, error: null });
     try {
-      const { backend, driveFileId } = get();
+      const { backend } = get();
       let locations: Location[];
       let path: string | null = null;
+      let sheetSchema: googleSheetsService.SheetSchema | null = get().sheetSchema;
 
       if (backend === 'drive') {
-        if (!driveFileId) throw new Error('No Google Drive file selected.');
-        const content = await googleDriveService.downloadFile(driveFileId);
-        locations = parseCSV(content);
+        if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
+        sheetSchema = await googleSheetsService.getSheetSchema(MASTER_SHEET_ID);
+        locations = await googleSheetsService.fetchLocationsFromSheet(MASTER_SHEET_ID, sheetSchema);
       } else {
         path = uri ?? DEFAULT_CSV_PATH;
         locations = await loadCSV(path);
@@ -93,9 +96,9 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
       }
 
       const unknownState = await loadUnknownBarcodes();
-      set({ locations, csvPath: path, loading: false, unknownBarcodes: Object.values(unknownState) });
+      set({ locations, csvPath: path, sheetSchema, loading: false, unknownBarcodes: Object.values(unknownState) });
     } catch (e: any) {
-      set({ loading: false, error: e?.message ?? 'Failed to load CSV' });
+      set({ loading: false, error: e?.message ?? 'Failed to load data' });
     }
   },
 
@@ -143,14 +146,34 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   setCurrentLocation: (id: string) => set({ currentLocationId: id }),
 
   generateReport: async () => {
-    const { backend, driveFileId, locations, unknownBarcodes } = get();
+    const { backend, locations, unknownBarcodes, sessionScans, sheetSchema } = get();
     if (backend === 'drive') {
-      if (!driveFileId) throw new Error('No Google Drive file selected.');
-      const csv = serializeReport(locations, unknownBarcodes);
-      await googleDriveService.uploadFile(driveFileId, csv);
+      if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
+      if (!sheetSchema) throw new Error('Master sheet schema not loaded; reload before submitting.');
+
+      if (sessionScans.length > 0) {
+        const displayName = await googleAuthService.getDisplayName();
+        if (!displayName) {
+          throw new Error('Could not determine signed-in Google account name. Reconnect Google Drive in Settings.');
+        }
+
+        const updatedAt = new Date().toISOString();
+        const updates: googleSheetsService.SheetRowUpdate[] = [];
+        for (const scan of sessionScans) {
+          const loc = locations.find(l => l.id === scan.locationId);
+          const item = loc?.items.find(i => i.barcode === scan.barcode);
+          if (!item || item.rowIndex == null) {
+            throw new Error('Some scanned items could not be matched to a master sheet row; submit aborted.');
+          }
+          updates.push({ rowIndex: item.rowIndex, updatedAt, updatedBy: displayName });
+        }
+
+        await googleSheetsService.updateRows(MASTER_SHEET_ID, sheetSchema, updates);
+      }
     } else {
       await exportReport(locations, unknownBarcodes);
     }
+    set({ sessionScans: [], sessionUnknownBarcodes: [] });
   },
 
   setBackend: async (backend: StorageBackend) => {
@@ -161,20 +184,12 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
 
   connectDrive: async () => {
     await googleAuthService.signIn();
-    set({ driveConnected: true });
+    const displayName = await googleAuthService.getDisplayName();
+    set({ driveConnected: true, displayName });
   },
 
   disconnectDrive: async () => {
     await googleAuthService.signOut();
-    const settings = await loadSettings();
-    await saveSettings({ ...settings, driveFileId: null, driveFileName: null });
-    set({ driveConnected: false, driveFileId: null, driveFileName: null });
-  },
-
-  selectDriveFile: async (fileId: string, fileName: string) => {
-    const settings = await loadSettings();
-    await saveSettings({ ...settings, driveFileId: fileId, driveFileName: fileName });
-    set({ driveFileId: fileId, driveFileName: fileName });
-    await get().loadFromCSV();
+    set({ driveConnected: false, displayName: null, sheetSchema: null });
   },
 }));

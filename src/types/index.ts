@@ -3,6 +3,7 @@ export type Item = {
   name: string;
   description: string;
   done: boolean;
+  rowIndex?: number;
 };
 
 export type Location = {

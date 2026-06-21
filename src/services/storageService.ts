@@ -8,14 +8,10 @@ export type StorageBackend = 'local' | 'drive';
 
 export type Settings = {
   backend: StorageBackend;
-  driveFileId: string | null;
-  driveFileName: string | null;
 };
 
 const DEFAULT_SETTINGS: Settings = {
   backend: 'local',
-  driveFileId: null,
-  driveFileName: null,
 };
 
 export async function loadSettings(): Promise<Settings> {

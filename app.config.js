@@ -1,14 +1,16 @@
+const PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME ?? 'com.anonymous.stocktaker';
+
 module.exports = {
   expo: {
     name: 'stocktaker',
     slug: 'stocktaker',
     version: '1.0.0',
-    scheme: 'stocktaker',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
     ios: {
       supportsTablet: true,
+      bundleIdentifier: PACKAGE_NAME,
     },
     android: {
       adaptiveIcon: {
@@ -19,14 +21,13 @@ module.exports = {
       },
       predictiveBackGestureEnabled: false,
       permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],
-      package: process.env.ANDROID_PACKAGE_NAME ?? 'com.anonymous.stocktaker',
+      package: PACKAGE_NAME,
     },
     web: {
       favicon: './assets/favicon.png',
     },
-    plugins: ['expo-camera', 'expo-sharing', 'expo-web-browser', 'expo-secure-store'],
+    plugins: ['expo-camera', 'expo-sharing', '@react-native-google-signin/google-signin'],
     extra: {
-      googleAndroidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID ?? '',
       googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID ?? '',
       googleMasterSheetId: process.env.GOOGLE_MASTER_SHEET_ID ?? '',
     },

@@ -33,6 +33,10 @@
 - `generateReport()` now clears `sessionScans`/`sessionUnknownBarcodes` after a successful submit (either backend); previously they were never cleared until app restart, so the Report screen kept showing already-submitted items. Still preserved on a failed submit, so the user can retry without re-scanning.
 - `inventoryStore.generateReport()`'s Drive "Updated At" stamp now uses `formatGMT8()` instead of `Date.toISOString()`.
 - `SettingsScreen` no longer has an inline "Connect Google" button (that action moved to `LandingScreen`); it now shows an editable "Checked by" alias field (persisted via `setCheckedByAlias`) and, when signed in, a "Sign out" action.
+- `LandingScreen` now drives the Google sign-in flow directly: shows a "Connect Google" button when signed out (replacing the always-enabled "Continue" button), and "Signed in as {name}" plus "Continue" once connected.
+- `app.config.js` now reads `expo.name`/`expo.icon` from `APP_NAME`/`APP_ICON` env vars (defaults: `'Stocktaker'` / `./assets/icon.png`), and exposes `appName` via `extra` for runtime use. New keys added to `.env.local.example` (blank).
+- `LandingScreen`'s title text and exit-confirmation alert now read the app name from `Constants.expoConfig.extra.appName` instead of a hardcoded `'Stocktaker'` string.
+- `LandingScreen`'s logo `Image` now requires `assets/logo-override.png` (a committed generic placeholder, currently identical to `assets/icon.png`) instead of `assets/icon.png` directly, so a custom logo can be swapped in locally by overwriting that file's bytes without touching tracked source code. The override file's content is intentionally not customized in this commit.
 
 ### Removed
 - "Qty: N" display from inventory item rows.

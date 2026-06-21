@@ -1,12 +1,14 @@
 const PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME ?? 'com.anonymous.stocktaker';
+const APP_NAME = process.env.APP_NAME ?? 'Stocktaker';
+const APP_ICON = process.env.APP_ICON ?? './assets/icon.png';
 
 module.exports = {
   expo: {
-    name: 'stocktaker',
+    name: APP_NAME,
     slug: 'stocktaker',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/icon.png',
+    icon: APP_ICON,
     userInterfaceStyle: 'light',
     ios: {
       supportsTablet: true,
@@ -28,6 +30,7 @@ module.exports = {
     },
     plugins: ['expo-camera', 'expo-sharing', '@react-native-google-signin/google-signin'],
     extra: {
+      appName: APP_NAME,
       googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID ?? '',
       googleMasterSheetId: process.env.GOOGLE_MASTER_SHEET_ID ?? '',
     },

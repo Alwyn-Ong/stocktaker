@@ -1,21 +1,42 @@
-import React, { useEffect } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, BackHandler } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View, Text, Image, TouchableOpacity, StyleSheet, Alert, BackHandler, ActivityIndicator,
+} from 'react-native';
+import Constants from 'expo-constants';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Landing'>;
 
+const APP_NAME: string = Constants.expoConfig?.extra?.appName ?? 'Stocktaker';
+
 export default function LandingScreen({ navigation }: Props) {
-  const hydrateSettings = useInventoryStore(s => s.hydrateSettings);
+  const { driveConnected, displayName, hydrateSettings, connectDrive } = useInventoryStore();
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     hydrateSettings();
   }, []);
 
+  async function handlePress() {
+    if (driveConnected) {
+      navigation.navigate('LocationPicker');
+      return;
+    }
+    setBusy(true);
+    try {
+      await connectDrive();
+    } catch (e: any) {
+      Alert.alert('Connection failed', e?.message ?? 'Could not connect to Google.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      Alert.alert('Exit app?', 'Are you sure you want to exit Stocktaker?', [
+      Alert.alert('Exit app?', `Are you sure you want to exit ${APP_NAME}?`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
       ]);
@@ -31,15 +52,24 @@ export default function LandingScreen({ navigation }: Props) {
       </TouchableOpacity>
 
       <View style={styles.center}>
-        <Image source={require('../../assets/icon.png')} style={styles.logo} />
-        <Text style={styles.title}>Stocktaker</Text>
+        <Image source={require('../../assets/logo-override.png')} style={styles.logo} />
+        <Text style={styles.title}>{APP_NAME}</Text>
 
-        <TouchableOpacity
-          style={styles.continueBtn}
-          onPress={() => navigation.navigate('LocationPicker')}
-        >
-          <Text style={styles.continueBtnText}>Continue</Text>
-        </TouchableOpacity>
+        {driveConnected && (
+          <Text style={styles.signedInText}>
+            {displayName ? `Signed in as ${displayName}` : 'Signed in'}
+          </Text>
+        )}
+
+        {busy ? (
+          <ActivityIndicator color="#4CAF50" />
+        ) : (
+          <TouchableOpacity style={styles.continueBtn} onPress={handlePress}>
+            <Text style={styles.continueBtnText}>
+              {driveConnected ? 'Continue' : 'Connect Google'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -66,7 +96,8 @@ const styles = StyleSheet.create({
     borderRadius: 70,
     marginBottom: 20,
   },
-  title: { fontSize: 26, fontWeight: '700', color: '#1a1a1a', marginBottom: 40 },
+  title: { fontSize: 26, fontWeight: '700', color: '#1a1a1a', marginBottom: 20 },
+  signedInText: { fontSize: 14, color: '#555', marginBottom: 20 },
   continueBtn: {
     backgroundColor: '#4CAF50',
     paddingHorizontal: 40,

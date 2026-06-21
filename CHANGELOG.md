@@ -37,6 +37,8 @@
 - `app.config.js` now reads `expo.name`/`expo.icon` from `APP_NAME`/`APP_ICON` env vars (defaults: `'Stocktaker'` / `./assets/icon.png`), and exposes `appName` via `extra` for runtime use. New keys added to `.env.local.example` (blank).
 - `LandingScreen`'s title text and exit-confirmation alert now read the app name from `Constants.expoConfig.extra.appName` instead of a hardcoded `'Stocktaker'` string.
 - `LandingScreen`'s logo `Image` now requires `assets/logo-override.png` (a committed generic placeholder, currently identical to `assets/icon.png`) instead of `assets/icon.png` directly, so a custom logo can be swapped in locally by overwriting that file's bytes without touching tracked source code. The override file's content is intentionally not customized in this commit.
+- `csvService.serializeReport`/`exportReport` now take a `checkedBy` string: the scanned-items table is headed by an "Items Present" row, the unknown-barcode section is labeled "Unknown barcodes - not in master list", and a footer with "Checked by: {name}" plus a GMT+8 generated timestamp (`formatGMT8`) is appended.
+- `ReportScreen`'s Print action now passes `checkedByAlias`/`displayName` through to `exportReport` as the report's `checkedBy` value.
 
 ### Removed
 - "Qty: N" display from inventory item rows.

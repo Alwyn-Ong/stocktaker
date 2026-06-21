@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
@@ -8,8 +9,12 @@ import { exportReport } from '../services/csvService';
 type Props = NativeStackScreenProps<RootStackParamList, 'Report'>;
 
 export default function ReportScreen({ navigation }: Props) {
-  const { locations, unknownBarcodes, sessionScans, sessionUnknownBarcodes, generateReport } = useInventoryStore();
+  const {
+    locations, unknownBarcodes, sessionScans, sessionUnknownBarcodes,
+    checkedByAlias, displayName, generateReport,
+  } = useInventoryStore();
   const [busy, setBusy] = useState(false);
+  const insets = useSafeAreaInsets();
 
   function locationName(id: string) {
     return locations.find(l => l.id === id)?.name ?? id;
@@ -32,7 +37,7 @@ export default function ReportScreen({ navigation }: Props) {
   async function handlePrint() {
     setBusy(true);
     try {
-      await exportReport(locations, unknownBarcodes);
+      await exportReport(locations, unknownBarcodes, checkedByAlias || displayName || '');
     } catch {
       Alert.alert('Error', 'Could not export report.');
     } finally {
@@ -85,7 +90,7 @@ export default function ReportScreen({ navigation }: Props) {
 
       {busy && <ActivityIndicator style={styles.loader} size="large" color="#4CAF50" />}
 
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: 16 + insets.bottom }]}>
         <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={() => navigation.goBack()} disabled={busy}>
           <Text style={styles.cancelBtnText}>Cancel</Text>
         </TouchableOpacity>

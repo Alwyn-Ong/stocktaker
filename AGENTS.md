@@ -8,4 +8,5 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
 - See `ANDROID_DEV.md` for how to build/run the app on a device.
 - See `changes.md` for the list of changes to implement.
 - Once a change from `changes.md` is implemented, remove its entry from the file instead of leaving it marked done.
+- Update `USER_MANUAL.md` whenever a change affects user-facing behavior (screens, flows, buttons, messages).
 - At the end of every changeset, ask whether to commit.

@@ -15,6 +15,7 @@
 - `LocationDropdown` component: shared closed-row/modal location picker used by `LocationPickerScreen` and `InventoryScreen`.
 - `ReportScreen`: review step before generating a report, listing only items and unknown barcodes scanned in the current session, with Submit, Print, and Cancel actions.
 - `sessionScans`/`sessionUnknownBarcodes` in-memory store fields, appended to by `markDone`/`recordUnknownBarcode`, reset on every app launch.
+- `src/utils/datetime.ts`: `formatGMT8()` helper formatting a `Date` as `YYYY-MM-DD HH:mm:ss (UTC+8)`, regardless of device timezone.
 
 ### Changed
 - `Item` dropped `quantity`/`scannedCount` in favor of a single `done` boolean; re-scanning an already-done item is now a no-op instead of incrementing a counter.

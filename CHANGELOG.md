@@ -39,6 +39,7 @@
 - `LandingScreen`'s logo `Image` now requires `assets/logo-override.png` (a committed generic placeholder, currently identical to `assets/icon.png`) instead of `assets/icon.png` directly, so a custom logo can be swapped in locally by overwriting that file's bytes without touching tracked source code. The override file's content is intentionally not customized in this commit.
 - `csvService.serializeReport`/`exportReport` now take a `checkedBy` string: the scanned-items table is headed by an "Items Present" row, the unknown-barcode section is labeled "Unknown barcodes - not in master list", and a footer with "Checked by: {name}" plus a GMT+8 generated timestamp (`formatGMT8`) is appended.
 - `ReportScreen`'s Print action now passes `checkedByAlias`/`displayName` through to `exportReport` as the report's `checkedBy` value.
+- `App.tsx` wrapped in `SafeAreaProvider`; `InventoryScreen`'s and `ReportScreen`'s bottom button bars and `ScannerScreen`'s overlay now add `useSafeAreaInsets()` bottom (and, for the scanner's top bar, top) padding so the buttons clear Android's gesture nav bar.
 
 ### Removed
 - "Qty: N" display from inventory item rows.

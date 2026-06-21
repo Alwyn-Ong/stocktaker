@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
@@ -12,6 +13,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Inventory'>;
 
 export default function InventoryScreen({ navigation, route }: Props) {
   const { locationId } = route.params;
+  const insets = useSafeAreaInsets();
   const locations = useInventoryStore(s => s.locations);
   const setCurrentLocation = useInventoryStore(s => s.setCurrentLocation);
   const location = locations.find(l => l.id === locationId);
@@ -48,7 +50,7 @@ export default function InventoryScreen({ navigation, route }: Props) {
         renderItem={({ item }) => <ItemRow item={item} />}
       />
 
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: 16 + insets.bottom }]}>
         <TouchableOpacity
           style={[styles.bottomBtn, styles.scanBtn]}
           onPress={() => navigation.navigate('Scanner', { locationId })}

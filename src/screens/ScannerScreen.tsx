@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
@@ -9,6 +10,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 
 export default function ScannerScreen({ navigation, route }: Props) {
   const { locationId } = route.params;
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
   const cooldown = useRef(false);
@@ -62,8 +64,8 @@ export default function ScannerScreen({ navigation, route }: Props) {
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={styles.overlay}>
-        <View style={styles.topBar}>
+      <View style={[styles.overlay, { paddingBottom: 48 + insets.bottom }]}>
+        <View style={[styles.topBar, { paddingTop: 56 + insets.top }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
             <Text style={styles.closeText}>✕ Close</Text>
           </TouchableOpacity>
@@ -90,10 +92,8 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingBottom: 48,
   },
   topBar: {
-    paddingTop: 56,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',

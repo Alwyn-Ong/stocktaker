@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LandingScreen from './src/screens/LandingScreen';
 import LocationPickerScreen from './src/screens/LocationPickerScreen';
 import InventoryScreen from './src/screens/InventoryScreen';
@@ -21,15 +22,17 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Landing" screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Landing" component={LandingScreen} />
-        <Stack.Screen name="LocationPicker" component={LocationPickerScreen} />
-        <Stack.Screen name="Inventory" component={InventoryScreen} />
-        <Stack.Screen name="Scanner" component={ScannerScreen} />
-        <Stack.Screen name="Report" component={ReportScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Landing" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Landing" component={LandingScreen} />
+          <Stack.Screen name="LocationPicker" component={LocationPickerScreen} />
+          <Stack.Screen name="Inventory" component={InventoryScreen} />
+          <Stack.Screen name="Scanner" component={ScannerScreen} />
+          <Stack.Screen name="Report" component={ReportScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

@@ -49,3 +49,4 @@
 - `LocationsScreen` and its `FlatList` of `LocationCard` rows (superseded by `LandingScreen` + `LocationPickerScreen`).
 - `googleDriveService.ts` and the Drive file browse/pick UI in `SettingsScreen` (superseded by `googleSheetsService` and the locked master sheet config). `driveFileId`/`driveFileName` removed from `Settings`.
 - Local CSV import/export backend: `csvService.parseCSV`/`loadCSV`, the `DocumentPicker`-based file picker on `LocationPickerScreen`, and `Settings.backend`/`StorageBackend`. The master Google Sheet is now the app's only data source.
+- All implemented entries from `changes.md`, including the four legacy `[DONE]` items that had been left in place across prior commits instead of being removed.

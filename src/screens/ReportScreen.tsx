@@ -38,8 +38,8 @@ export default function ReportScreen({ navigation }: Props) {
     setBusy(true);
     try {
       await exportReport(locations, unknownBarcodes, checkedByAlias || displayName || '');
-    } catch {
-      Alert.alert('Error', 'Could not export report.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Could not export report.');
     } finally {
       setBusy(false);
     }

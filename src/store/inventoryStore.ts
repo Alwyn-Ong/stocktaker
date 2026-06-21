@@ -5,6 +5,9 @@ import {
   loadDoneState, saveDoneState, makeKey,
   loadUnknownBarcodes, saveUnknownBarcodes,
   loadSettings, saveSettings,
+  loadSubmittedState, saveSubmittedState,
+  loadSessionScans, saveSessionScans,
+  loadSessionUnknownBarcodes, saveSessionUnknownBarcodes,
 } from '../services/storageService';
 import * as googleAuthService from '../services/googleAuthService';
 import * as googleSheetsService from '../services/googleSheetsService';
@@ -20,6 +23,7 @@ type InventoryStore = {
   unknownBarcodes: UnknownBarcode[];
   sessionScans: SessionScan[];
   sessionUnknownBarcodes: UnknownBarcode[];
+  submittedKeys: Record<string, boolean>;
 
   driveConnected: boolean;
   displayName: string | null;
@@ -46,6 +50,7 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   unknownBarcodes: [],
   sessionScans: [],
   sessionUnknownBarcodes: [],
+  submittedKeys: {},
 
   driveConnected: false,
   displayName: null,
@@ -77,7 +82,17 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
       }
 
       const unknownState = await loadUnknownBarcodes();
-      set({ locations, sheetSchema, loading: false, unknownBarcodes: Object.values(unknownState) });
+      const submittedState = await loadSubmittedState();
+      const sessionScans = await loadSessionScans();
+      const sessionUnknownBarcodes = await loadSessionUnknownBarcodes();
+      const submittedKeys: Record<string, boolean> = {};
+      for (const key of Object.keys(submittedState)) submittedKeys[key] = true;
+
+      set({
+        locations, sheetSchema, loading: false,
+        unknownBarcodes: Object.values(unknownState),
+        submittedKeys, sessionScans, sessionUnknownBarcodes,
+      });
     } catch (e: any) {
       set({ loading: false, error: e?.message ?? 'Failed to load data' });
     }
@@ -86,22 +101,33 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   markDone: (barcode: string, locationId: string) => {
     const loc = get().locations.find(l => l.id === locationId);
     const item = loc?.items.find(i => i.barcode === barcode);
-    if (!item || item.done) return;
+    if (!item) return;
 
-    const locations = get().locations.map(l => {
-      if (l.id !== locationId) return l;
-      return {
-        ...l,
-        items: l.items.map(i => i.barcode === barcode ? { ...i, done: true } : i),
-      };
-    });
-    set({ locations, sessionScans: [...get().sessionScans, { barcode, locationId, name: item.name }] });
+    const key = makeKey(barcode, locationId);
+    if (item.done && get().submittedKeys[key]) return; // already confirmed on the sheet
 
-    loadDoneState().then(doneState => {
-      const key = makeKey(barcode, locationId);
-      doneState[key] = 1;
-      saveDoneState(doneState);
-    });
+    if (!item.done) {
+      const locations = get().locations.map(l => {
+        if (l.id !== locationId) return l;
+        return {
+          ...l,
+          items: l.items.map(i => i.barcode === barcode ? { ...i, done: true } : i),
+        };
+      });
+      set({ locations });
+
+      loadDoneState().then(doneState => {
+        doneState[key] = 1;
+        saveDoneState(doneState);
+      });
+    }
+
+    const sessionScans = get().sessionScans;
+    if (!sessionScans.some(s => s.barcode === barcode && s.locationId === locationId)) {
+      const next = [...sessionScans, { barcode, locationId, name: item.name }];
+      set({ sessionScans: next });
+      saveSessionScans(next);
+    }
   },
 
   recordUnknownBarcode: (barcode: string, locationId: string) => {
@@ -109,7 +135,9 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
     if (unknownBarcodes.some(u => u.barcode === barcode && u.locationId === locationId)) return;
 
     const next = [...unknownBarcodes, { barcode, locationId }];
-    set({ unknownBarcodes: next, sessionUnknownBarcodes: [...sessionUnknownBarcodes, { barcode, locationId }] });
+    const nextSession = [...sessionUnknownBarcodes, { barcode, locationId }];
+    set({ unknownBarcodes: next, sessionUnknownBarcodes: nextSession });
+    saveSessionUnknownBarcodes(nextSession);
 
     loadUnknownBarcodes().then(state => {
       state[makeKey(barcode, locationId)] = { barcode, locationId };
@@ -142,8 +170,20 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
       }
 
       await googleSheetsService.updateRows(MASTER_SHEET_ID, sheetSchema, updates);
+
+      const submittedState = await loadSubmittedState();
+      const submittedKeys = { ...get().submittedKeys };
+      for (const scan of sessionScans) {
+        const key = makeKey(scan.barcode, scan.locationId);
+        submittedState[key] = 1;
+        submittedKeys[key] = true;
+      }
+      await saveSubmittedState(submittedState);
+      set({ submittedKeys });
     }
     set({ sessionScans: [], sessionUnknownBarcodes: [] });
+    await saveSessionScans([]);
+    await saveSessionUnknownBarcodes([]);
   },
 
   connectDrive: async () => {

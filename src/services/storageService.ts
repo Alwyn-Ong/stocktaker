@@ -1,8 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { STORAGE_KEY, SETTINGS_KEY, UNKNOWN_BARCODES_KEY } from '../constants';
+import {
+  STORAGE_KEY, SETTINGS_KEY, UNKNOWN_BARCODES_KEY,
+  SUBMITTED_KEY, SESSION_SCANS_KEY, SESSION_UNKNOWN_BARCODES_KEY,
+} from '../constants';
+import { SessionScan, UnknownBarcode } from '../types';
 
 type DoneState = Record<string, number>; // key: `${barcode}_${locationId}`
 type UnknownBarcodeState = Record<string, { barcode: string; locationId: string }>; // key: `${barcode}_${locationId}`
+type SubmittedState = Record<string, number>; // key: `${barcode}_${locationId}`
 
 export type Settings = {
   checkedByAlias?: string;
@@ -39,4 +44,31 @@ export async function loadUnknownBarcodes(): Promise<UnknownBarcodeState> {
 
 export async function saveUnknownBarcodes(state: UnknownBarcodeState): Promise<void> {
   await AsyncStorage.setItem(UNKNOWN_BARCODES_KEY, JSON.stringify(state));
+}
+
+export async function loadSubmittedState(): Promise<SubmittedState> {
+  const raw = await AsyncStorage.getItem(SUBMITTED_KEY);
+  return raw ? JSON.parse(raw) : {};
+}
+
+export async function saveSubmittedState(state: SubmittedState): Promise<void> {
+  await AsyncStorage.setItem(SUBMITTED_KEY, JSON.stringify(state));
+}
+
+export async function loadSessionScans(): Promise<SessionScan[]> {
+  const raw = await AsyncStorage.getItem(SESSION_SCANS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveSessionScans(scans: SessionScan[]): Promise<void> {
+  await AsyncStorage.setItem(SESSION_SCANS_KEY, JSON.stringify(scans));
+}
+
+export async function loadSessionUnknownBarcodes(): Promise<UnknownBarcode[]> {
+  const raw = await AsyncStorage.getItem(SESSION_UNKNOWN_BARCODES_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveSessionUnknownBarcodes(barcodes: UnknownBarcode[]): Promise<void> {
+  await AsyncStorage.setItem(SESSION_UNKNOWN_BARCODES_KEY, JSON.stringify(barcodes));
 }

@@ -44,6 +44,8 @@
 - `AGENTS.md` Workflow section now requires `USER_MANUAL.md` to be kept up to date when user-facing behavior changes.
 - `csvService.test.ts` and `inventoryStore.test.ts` rewritten to match the Sheets-backend implementation: removed `loadCSV` and `backend`-field coverage (both removed from the implementation in earlier changes), and added coverage for `serializeReport`'s new header/footer format, `hydrateSettings`, `loadInventory`, `setCheckedByAlias`, and the alias/display-name fallback paths in `generateReport`.
 - `ReportScreen`'s Print failure alert now shows the specific error message instead of a generic failure string (matching the existing Submit failure alert).
+- `sessionScans`/`sessionUnknownBarcodes` are now persisted to `AsyncStorage` (new `loadSessionScans`/`saveSessionScans`/`loadSessionUnknownBarcodes`/`saveSessionUnknownBarcodes` in `storageService`) instead of living only in memory, so they survive app restarts/reloads instead of silently dropping items still pending submission.
+- New `submittedKeys` store field (backed by a persisted submitted-state map via `loadSubmittedState`/`saveSubmittedState`), set only after `generateReport()`'s sheet write actually succeeds. `markDone` now distinguishes "done" from "confirmed submitted": rescanning an item that's marked present but not yet confirmed submitted (e.g. after a failed Submit, or a lost session) re-queues it instead of being a no-op. `ScannerScreen` shows a "Re-queued: {name}" toast for this case, reserving "Already scanned" for items that are both done and confirmed submitted.
 
 ### Removed
 - "Qty: N" display from inventory item rows.

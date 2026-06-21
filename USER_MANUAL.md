@@ -35,8 +35,12 @@ done) plus two buttons at the bottom:
 
 - **Scan** — opens the camera. Point it at a barcode:
   - Green toast (`✓ Item Name`) — item found and marked as present.
-  - Orange toast (`Already scanned`) — item was already marked present this
-    session or in a previous session; nothing changes.
+  - Green toast (`Re-queued: Item Name`) — item was already marked present
+    but had not yet been confirmed written to the master sheet (e.g. a
+    previous Submit failed or was interrupted); it's queued for submission
+    again.
+  - Orange toast (`Already scanned`) — item was already marked present *and*
+    confirmed submitted to the master sheet; nothing changes.
   - Red toast (`Unknown barcode`) — the scanned barcode isn't in this
     location's item list. It's recorded separately and will appear in the
     report's "Unknown barcodes" section.
@@ -84,3 +88,9 @@ Reached via the gear icon on the Landing screen:
   reconnect your Google account from Settings.
 - **Could not load inventory** on the Select Location screen — usually a
   connectivity issue; check your internet connection and retry.
+- **"You don't have edit access to the master sheet"** when submitting — your
+  Google account only has read access to the sheet. Ask the sheet owner for
+  Editor permission, then either tap Submit again (if you haven't left the
+  Report screen) or rescan the affected items and submit — items marked
+  present but never confirmed submitted are automatically re-queued when
+  rescanned (see "Re-queued" toast above), so no progress is lost.

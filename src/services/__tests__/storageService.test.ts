@@ -4,7 +4,6 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 
 import {
   loadUnknownBarcodes, saveUnknownBarcodes,
-  loadSubmittedState, saveSubmittedState,
   loadSessionScans, saveSessionScans,
   loadSessionUnknownBarcodes, saveSessionUnknownBarcodes,
 } from '../storageService';
@@ -22,18 +21,6 @@ describe('unknown barcode persistence', () => {
     expect(await loadUnknownBarcodes()).toEqual({
       '999999999999_warehouse-a': { barcode: '999999999999', locationId: 'warehouse-a' },
     });
-  });
-});
-
-describe('submitted-state persistence', () => {
-  it('returns an empty object when nothing has been saved yet', async () => {
-    expect(await loadSubmittedState()).toEqual({});
-  });
-
-  it('round-trips saved submitted state', async () => {
-    await saveSubmittedState({ '012345_warehouse-a': 1 });
-
-    expect(await loadSubmittedState()).toEqual({ '012345_warehouse-a': 1 });
   });
 });
 

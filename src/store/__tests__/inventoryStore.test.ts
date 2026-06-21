@@ -4,15 +4,11 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('../../services/storageService', () => ({
-  loadDoneState: jest.fn().mockResolvedValue({}),
-  saveDoneState: jest.fn().mockResolvedValue(undefined),
   loadUnknownBarcodes: jest.fn().mockResolvedValue({}),
   saveUnknownBarcodes: jest.fn().mockResolvedValue(undefined),
   makeKey: (barcode: string, locationId: string) => `${barcode}_${locationId}`,
   loadSettings: jest.fn().mockResolvedValue({}),
   saveSettings: jest.fn().mockResolvedValue(undefined),
-  loadSubmittedState: jest.fn().mockResolvedValue({}),
-  saveSubmittedState: jest.fn().mockResolvedValue(undefined),
   loadSessionScans: jest.fn().mockResolvedValue([]),
   saveSessionScans: jest.fn().mockResolvedValue(undefined),
   loadSessionUnknownBarcodes: jest.fn().mockResolvedValue([]),
@@ -35,8 +31,8 @@ jest.mock('../../services/googleSheetsService', () => ({
 
 import { useInventoryStore } from '../inventoryStore';
 import {
-  loadDoneState, saveDoneState, loadUnknownBarcodes, loadSettings, saveSettings,
-  loadSubmittedState, saveSubmittedState, saveSessionScans, saveSessionUnknownBarcodes,
+  loadUnknownBarcodes, loadSettings, saveSettings,
+  loadSessionScans, saveSessionScans, saveSessionUnknownBarcodes,
 } from '../../services/storageService';
 import * as googleAuthService from '../../services/googleAuthService';
 import * as googleSheetsService from '../../services/googleSheetsService';
@@ -57,7 +53,6 @@ function seedLocation() {
     unknownBarcodes: [],
     sessionScans: [],
     sessionUnknownBarcodes: [],
-    submittedKeys: {},
     sheetSchema: null,
     checkedByAlias: null,
   });
@@ -92,17 +87,16 @@ describe('hydrateSettings', () => {
 });
 
 describe('loadInventory', () => {
-  it('fetches locations from the master sheet and merges persisted done state', async () => {
+  it('fetches locations from the master sheet, taking done status from the sheet itself', async () => {
     const schema = { sheetTitle: 'Sheet1', columnIndex: {} as any };
     (googleSheetsService.getSheetSchema as jest.Mock).mockResolvedValue(schema);
     (googleSheetsService.fetchLocationsFromSheet as jest.Mock).mockResolvedValue([
       {
         id: 'warehouse-a',
         name: 'Warehouse A',
-        items: [{ barcode: '012345', name: 'Widget', description: '', done: false, rowIndex: 2 }],
+        items: [{ barcode: '012345', name: 'Widget', description: '', done: true, rowIndex: 2 }],
       },
     ]);
-    (loadDoneState as jest.Mock).mockResolvedValue({ '012345_warehouse-a': 1 });
     (loadUnknownBarcodes as jest.Mock).mockResolvedValue({
       '999999999999_warehouse-a': { barcode: '999999999999', locationId: 'warehouse-a' },
     });
@@ -117,14 +111,22 @@ describe('loadInventory', () => {
     expect(state.sheetSchema).toBe(schema);
   });
 
-  it('hydrates submittedKeys from persisted submitted state', async () => {
+  it('marks items still pending submission as done even if the sheet has not caught up yet', async () => {
     (googleSheetsService.getSheetSchema as jest.Mock).mockResolvedValue({ sheetTitle: 'Sheet1', columnIndex: {} as any });
-    (googleSheetsService.fetchLocationsFromSheet as jest.Mock).mockResolvedValue([]);
-    (loadSubmittedState as jest.Mock).mockResolvedValue({ '012345_warehouse-a': 1 });
+    (googleSheetsService.fetchLocationsFromSheet as jest.Mock).mockResolvedValue([
+      {
+        id: 'warehouse-a',
+        name: 'Warehouse A',
+        items: [{ barcode: '012345', name: 'Widget', description: '', done: false, rowIndex: 2 }],
+      },
+    ]);
+    (loadSessionScans as jest.Mock).mockResolvedValue([
+      { barcode: '012345', locationId: 'warehouse-a', name: 'Widget' },
+    ]);
 
     await useInventoryStore.getState().loadInventory();
 
-    expect(useInventoryStore.getState().submittedKeys).toEqual({ '012345_warehouse-a': true });
+    expect(useInventoryStore.getState().locations[0].items[0].done).toBe(true);
   });
 
   it('sets an error message when the sheet cannot be read', async () => {
@@ -140,13 +142,13 @@ describe('loadInventory', () => {
 });
 
 describe('markDone', () => {
-  it('marks an unscanned item done and persists it', async () => {
+  it('marks an unscanned item done and queues it for submission', async () => {
     useInventoryStore.getState().markDone('012345', 'warehouse-a');
     await flush();
 
     const item = useInventoryStore.getState().locations[0].items[0];
     expect(item.done).toBe(true);
-    expect(saveDoneState).toHaveBeenCalledTimes(1);
+    expect(saveSessionScans).toHaveBeenCalledTimes(1);
   });
 
   it('appends to sessionScans', async () => {
@@ -158,7 +160,7 @@ describe('markDone', () => {
     ]);
   });
 
-  it('is a no-op when the item is already done', async () => {
+  it('is a no-op when the item is already done and still pending submission', async () => {
     useInventoryStore.getState().markDone('012345', 'warehouse-a');
     await flush();
     jest.clearAllMocks();
@@ -166,36 +168,21 @@ describe('markDone', () => {
     useInventoryStore.getState().markDone('012345', 'warehouse-a');
     await flush();
 
-    expect(saveDoneState).not.toHaveBeenCalled();
+    expect(saveSessionScans).not.toHaveBeenCalled();
     expect(useInventoryStore.getState().sessionScans).toHaveLength(1);
   });
 
   it('is a true no-op once the item has been confirmed submitted', async () => {
     useInventoryStore.getState().markDone('012345', 'warehouse-a');
     await flush();
-    useInventoryStore.setState({ sessionScans: [], submittedKeys: { '012345_warehouse-a': true } });
+    useInventoryStore.setState({ sessionScans: [] }); // submit succeeded; sheet now confirms this row
     jest.clearAllMocks();
 
     useInventoryStore.getState().markDone('012345', 'warehouse-a');
     await flush();
 
-    expect(saveDoneState).not.toHaveBeenCalled();
+    expect(saveSessionScans).not.toHaveBeenCalled();
     expect(useInventoryStore.getState().sessionScans).toEqual([]);
-  });
-
-  it('re-queues a done-but-unsubmitted item (recovery after a lost session)', async () => {
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
-    await flush();
-    useInventoryStore.setState({ sessionScans: [] }); // simulate a reload wiping the in-memory session
-    jest.clearAllMocks();
-
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
-    await flush();
-
-    expect(saveDoneState).not.toHaveBeenCalled();
-    expect(useInventoryStore.getState().sessionScans).toEqual([
-      { barcode: '012345', locationId: 'warehouse-a', name: 'Widget' },
-    ]);
   });
 });
 
@@ -268,7 +255,7 @@ describe('generateReport', () => {
     expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([]);
   });
 
-  it('records submitted keys and persists the cleared session lists', async () => {
+  it('persists the cleared session lists after a successful submit', async () => {
     useInventoryStore.setState({
       checkedByAlias: 'JD',
       sheetSchema: { sheetTitle: 'Sheet1', columnIndex: {} as any },
@@ -284,8 +271,6 @@ describe('generateReport', () => {
 
     await useInventoryStore.getState().generateReport();
 
-    expect(useInventoryStore.getState().submittedKeys).toEqual({ '012345_warehouse-a': true });
-    expect(saveSubmittedState).toHaveBeenCalledWith({ '012345_warehouse-a': 1 });
     expect(saveSessionScans).toHaveBeenCalledWith([]);
     expect(saveSessionUnknownBarcodes).toHaveBeenCalledWith([]);
   });

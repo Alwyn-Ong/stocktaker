@@ -2,10 +2,9 @@ import { create } from 'zustand';
 import Constants from 'expo-constants';
 import { Location, UnknownBarcode, SessionScan } from '../types';
 import {
-  loadDoneState, saveDoneState, makeKey,
+  makeKey,
   loadUnknownBarcodes, saveUnknownBarcodes,
   loadSettings, saveSettings,
-  loadSubmittedState, saveSubmittedState,
   loadSessionScans, saveSessionScans,
   loadSessionUnknownBarcodes, saveSessionUnknownBarcodes,
 } from '../services/storageService';
@@ -23,7 +22,6 @@ type InventoryStore = {
   unknownBarcodes: UnknownBarcode[];
   sessionScans: SessionScan[];
   sessionUnknownBarcodes: UnknownBarcode[];
-  submittedKeys: Record<string, boolean>;
 
   driveConnected: boolean;
   displayName: string | null;
@@ -50,7 +48,6 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   unknownBarcodes: [],
   sessionScans: [],
   sessionUnknownBarcodes: [],
-  submittedKeys: {},
 
   driveConnected: false,
   displayName: null,
@@ -71,27 +68,23 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
       const sheetSchema = await googleSheetsService.getSheetSchema(MASTER_SHEET_ID);
       const locations = await googleSheetsService.fetchLocationsFromSheet(MASTER_SHEET_ID, sheetSchema);
 
-      const doneState = await loadDoneState();
+      const sessionScans = await loadSessionScans();
+      const sessionUnknownBarcodes = await loadSessionUnknownBarcodes();
 
-      // Merge persisted done state
+      // Scans not yet confirmed submitted won't show as done on the sheet yet.
+      const pendingKeys = new Set(sessionScans.map(s => makeKey(s.barcode, s.locationId)));
       for (const loc of locations) {
         for (const item of loc.items) {
-          const key = makeKey(item.barcode, loc.id);
-          item.done = (doneState[key] ?? 0) >= 1;
+          if (pendingKeys.has(makeKey(item.barcode, loc.id))) item.done = true;
         }
       }
 
       const unknownState = await loadUnknownBarcodes();
-      const submittedState = await loadSubmittedState();
-      const sessionScans = await loadSessionScans();
-      const sessionUnknownBarcodes = await loadSessionUnknownBarcodes();
-      const submittedKeys: Record<string, boolean> = {};
-      for (const key of Object.keys(submittedState)) submittedKeys[key] = true;
 
       set({
         locations, sheetSchema, loading: false,
         unknownBarcodes: Object.values(unknownState),
-        submittedKeys, sessionScans, sessionUnknownBarcodes,
+        sessionScans, sessionUnknownBarcodes,
       });
     } catch (e: any) {
       set({ loading: false, error: e?.message ?? 'Failed to load data' });
@@ -103,8 +96,9 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
     const item = loc?.items.find(i => i.barcode === barcode);
     if (!item) return;
 
-    const key = makeKey(barcode, locationId);
-    if (item.done && get().submittedKeys[key]) return; // already confirmed on the sheet
+    const sessionScans = get().sessionScans;
+    const pending = sessionScans.some(s => s.barcode === barcode && s.locationId === locationId);
+    if (item.done && !pending) return; // already confirmed on the sheet
 
     if (!item.done) {
       const locations = get().locations.map(l => {
@@ -115,15 +109,9 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
         };
       });
       set({ locations });
-
-      loadDoneState().then(doneState => {
-        doneState[key] = 1;
-        saveDoneState(doneState);
-      });
     }
 
-    const sessionScans = get().sessionScans;
-    if (!sessionScans.some(s => s.barcode === barcode && s.locationId === locationId)) {
+    if (!pending) {
       const next = [...sessionScans, { barcode, locationId, name: item.name }];
       set({ sessionScans: next });
       saveSessionScans(next);
@@ -170,16 +158,6 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
       }
 
       await googleSheetsService.updateRows(MASTER_SHEET_ID, sheetSchema, updates);
-
-      const submittedState = await loadSubmittedState();
-      const submittedKeys = { ...get().submittedKeys };
-      for (const scan of sessionScans) {
-        const key = makeKey(scan.barcode, scan.locationId);
-        submittedState[key] = 1;
-        submittedKeys[key] = true;
-      }
-      await saveSubmittedState(submittedState);
-      set({ submittedKeys });
     }
     set({ sessionScans: [], sessionUnknownBarcodes: [] });
     await saveSessionScans([]);

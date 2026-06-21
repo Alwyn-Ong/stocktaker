@@ -34,18 +34,22 @@ Inside a location, you'll see the list of items and their status (done/not
 done) plus two buttons at the bottom:
 
 - **Scan** — opens the camera. Point it at a barcode:
-  - Green toast (`✓ Item Name`) — item found and marked as present.
-  - Green toast (`Re-queued: Item Name`) — item was already marked present
-    but had not yet been confirmed written to the master sheet (e.g. a
-    previous Submit failed or was interrupted); it's queued for submission
-    again.
-  - Orange toast (`Already scanned`) — item was already marked present *and*
-    confirmed submitted to the master sheet; nothing changes.
+  - Green toast (`✓ Item Name`) — item marked as present and queued for
+    submission (whether it's the first scan, or a re-scan of an item that's
+    marked present but not yet confirmed on the master sheet).
+  - Orange toast (`Already scanned`) — item is already confirmed present on
+    the master sheet; nothing changes.
   - Red toast (`Unknown barcode`) — the scanned barcode isn't in this
     location's item list. It's recorded separately and will appear in the
     report's "Unknown barcodes" section.
   - Tap **✕ Close** to return to the item list.
 - **Finish / Generate Report** — goes to the Report screen (section 4).
+
+An item's done/not-done status comes from the master sheet itself (whether
+its "Updated At" cell is filled in), plus anything scanned this session that
+hasn't been submitted yet. Tap **↻ Refresh** in the header to reload the item
+list and done status from the master sheet — useful if someone else updated
+the sheet, or if a row was reset and you want your view to catch up.
 
 You can switch to a different location at any time using the dropdown in the
 header — your scanned progress is saved per item, not lost when switching.
@@ -92,5 +96,8 @@ Reached via the gear icon on the Landing screen:
   Google account only has read access to the sheet. Ask the sheet owner for
   Editor permission, then either tap Submit again (if you haven't left the
   Report screen) or rescan the affected items and submit — items marked
-  present but never confirmed submitted are automatically re-queued when
-  rescanned (see "Re-queued" toast above), so no progress is lost.
+  present but not yet confirmed on the sheet stay queued for submission, so
+  no progress is lost.
+- **An item still shows as done after its row was reset on the master sheet**
+  — tap **↻ Refresh** on the location screen to reload status from the sheet;
+  until then the app may still be showing what it last loaded.

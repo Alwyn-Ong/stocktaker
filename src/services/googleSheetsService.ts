@@ -92,6 +92,7 @@ export async function fetchLocationsFromSheet(spreadsheetId: string, schema: She
     const barcode = row[schema.columnIndex.Barcode]?.trim();
     const itemName = row[schema.columnIndex['Item Name']]?.trim();
     const description = row[schema.columnIndex.Description]?.trim() ?? '';
+    const updatedAt = row[schema.columnIndex['Updated At']]?.trim();
 
     if (!name || !barcode || !itemName) return;
 
@@ -104,7 +105,7 @@ export async function fetchLocationsFromSheet(spreadsheetId: string, schema: She
       barcode,
       name: itemName,
       description,
-      done: false,
+      done: !!updatedAt,
       rowIndex: i + 2,
     });
   });

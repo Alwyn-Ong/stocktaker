@@ -5,7 +5,6 @@ import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-ca
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
-import { makeKey } from '../services/storageService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 
@@ -16,7 +15,7 @@ export default function ScannerScreen({ navigation, route }: Props) {
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
   const cooldown = useRef(false);
 
-  const { locations, markDone, recordUnknownBarcode, submittedKeys } = useInventoryStore();
+  const { locations, markDone, recordUnknownBarcode, sessionScans } = useInventoryStore();
   const location = locations.find(l => l.id === locationId);
 
   useEffect(() => {
@@ -42,14 +41,14 @@ export default function ScannerScreen({ navigation, route }: Props) {
       showToast(`Unknown barcode: ${data}`, '#f44336');
       return;
     }
-    if (item.done && submittedKeys[makeKey(data, locationId)]) {
+    const pending = sessionScans.some(s => s.barcode === data && s.locationId === locationId);
+    if (item.done && !pending) {
       showToast(`Already scanned: ${item.name}`, '#FF9800');
       return;
     }
 
-    const wasDone = item.done;
     markDone(data, locationId);
-    showToast(wasDone ? `Re-queued: ${item.name}` : `✓ ${item.name}`, '#4CAF50');
+    showToast(`✓ ${item.name}`, '#4CAF50');
   }
 
   if (!permission) {

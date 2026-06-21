@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -15,7 +15,9 @@ export default function InventoryScreen({ navigation, route }: Props) {
   const { locationId } = route.params;
   const insets = useSafeAreaInsets();
   const locations = useInventoryStore(s => s.locations);
+  const loading = useInventoryStore(s => s.loading);
   const setCurrentLocation = useInventoryStore(s => s.setCurrentLocation);
+  const loadInventory = useInventoryStore(s => s.loadInventory);
   const location = locations.find(l => l.id === locationId);
 
   if (!location) {
@@ -31,12 +33,23 @@ export default function InventoryScreen({ navigation, route }: Props) {
     navigation.setParams({ locationId: id });
   }
 
+  async function handleRefresh() {
+    await loadInventory();
+    const { error } = useInventoryStore.getState();
+    if (error) Alert.alert('Refresh failed', error);
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.headerBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>{'← Back'}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backText}>{'← Back'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleRefresh} disabled={loading} style={styles.refreshBtn}>
+            <Text style={styles.refreshText}>{loading ? 'Refreshing…' : '↻ Refresh'}</Text>
+          </TouchableOpacity>
+        </View>
         <LocationDropdown
           locations={locations}
           selectedId={locationId}
@@ -80,8 +93,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
     gap: 12,
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   backBtn: {},
   backText: { color: '#4CAF50', fontSize: 15 },
+  refreshBtn: {},
+  refreshText: { color: '#1565C0', fontSize: 15 },
   bottomBar: {
     flexDirection: 'row',
     gap: 12,

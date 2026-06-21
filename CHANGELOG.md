@@ -42,6 +42,7 @@
 - `App.tsx` wrapped in `SafeAreaProvider`; `InventoryScreen`'s and `ReportScreen`'s bottom button bars and `ScannerScreen`'s overlay now add `useSafeAreaInsets()` bottom (and, for the scanner's top bar, top) padding so the buttons clear Android's gesture nav bar.
 - `USER_MANUAL.md`: end-user guide covering sign-in, location selection, scanning, report submission, and Settings.
 - `AGENTS.md` Workflow section now requires `USER_MANUAL.md` to be kept up to date when user-facing behavior changes.
+- `csvService.test.ts` and `inventoryStore.test.ts` rewritten to match the Sheets-backend implementation: removed `loadCSV` and `backend`-field coverage (both removed from the implementation in earlier changes), and added coverage for `serializeReport`'s new header/footer format, `hydrateSettings`, `loadInventory`, `setCheckedByAlias`, and the alias/display-name fallback paths in `generateReport`.
 
 ### Removed
 - "Qty: N" display from inventory item rows.

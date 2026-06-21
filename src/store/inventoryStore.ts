@@ -1,89 +1,70 @@
 import { create } from 'zustand';
-import * as DocumentPicker from 'expo-document-picker';
 import Constants from 'expo-constants';
 import { Location, UnknownBarcode, SessionScan } from '../types';
-import { loadCSV, exportReport } from '../services/csvService';
 import {
   loadDoneState, saveDoneState, makeKey,
   loadUnknownBarcodes, saveUnknownBarcodes,
-  loadSettings, saveSettings, StorageBackend,
+  loadSettings, saveSettings,
 } from '../services/storageService';
 import * as googleAuthService from '../services/googleAuthService';
 import * as googleSheetsService from '../services/googleSheetsService';
-import { DEFAULT_CSV_PATH } from '../constants';
+import { formatGMT8 } from '../utils/datetime';
 
 const MASTER_SHEET_ID: string = Constants.expoConfig?.extra?.googleMasterSheetId ?? '';
 
 type InventoryStore = {
   locations: Location[];
   currentLocationId: string | null;
-  csvPath: string | null;
   loading: boolean;
   error: string | null;
   unknownBarcodes: UnknownBarcode[];
   sessionScans: SessionScan[];
   sessionUnknownBarcodes: UnknownBarcode[];
 
-  backend: StorageBackend;
   driveConnected: boolean;
   displayName: string | null;
+  checkedByAlias: string | null;
   sheetSchema: googleSheetsService.SheetSchema | null;
 
   hydrateSettings: () => Promise<void>;
-  loadFromCSV: (uri?: string) => Promise<void>;
-  pickAndLoadCSV: () => Promise<void>;
+  loadInventory: () => Promise<void>;
   markDone: (barcode: string, locationId: string) => void;
   recordUnknownBarcode: (barcode: string, locationId: string) => void;
   setCurrentLocation: (id: string) => void;
   generateReport: () => Promise<void>;
 
-  setBackend: (backend: StorageBackend) => Promise<void>;
   connectDrive: () => Promise<void>;
   disconnectDrive: () => Promise<void>;
+  setCheckedByAlias: (alias: string) => Promise<void>;
 };
 
 export const useInventoryStore = create<InventoryStore>((set, get) => ({
   locations: [],
   currentLocationId: null,
-  csvPath: null,
   loading: false,
   error: null,
   unknownBarcodes: [],
   sessionScans: [],
   sessionUnknownBarcodes: [],
 
-  backend: 'local',
   driveConnected: false,
   displayName: null,
+  checkedByAlias: null,
   sheetSchema: null,
 
   hydrateSettings: async () => {
-    const settings = await loadSettings();
     const driveConnected = await googleAuthService.isSignedIn();
     const displayName = driveConnected ? await googleAuthService.getDisplayName() : null;
-    set({
-      backend: settings.backend,
-      driveConnected,
-      displayName,
-    });
+    const settings = await loadSettings();
+    set({ driveConnected, displayName, checkedByAlias: settings.checkedByAlias ?? null });
   },
 
-  loadFromCSV: async (uri?: string) => {
+  loadInventory: async () => {
     set({ loading: true, error: null });
     try {
-      const { backend } = get();
-      let locations: Location[];
-      let path: string | null = null;
-      let sheetSchema: googleSheetsService.SheetSchema | null = get().sheetSchema;
-
-      if (backend === 'drive') {
-        if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
-        sheetSchema = await googleSheetsService.getSheetSchema(MASTER_SHEET_ID);
-        locations = await googleSheetsService.fetchLocationsFromSheet(MASTER_SHEET_ID, sheetSchema);
-      } else {
-        path = uri ?? DEFAULT_CSV_PATH;
-        locations = await loadCSV(path);
-      }
+      if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
+      const sheetSchema = await googleSheetsService.getSheetSchema(MASTER_SHEET_ID);
+      const locations = await googleSheetsService.fetchLocationsFromSheet(MASTER_SHEET_ID, sheetSchema);
 
       const doneState = await loadDoneState();
 
@@ -96,17 +77,10 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
       }
 
       const unknownState = await loadUnknownBarcodes();
-      set({ locations, csvPath: path, sheetSchema, loading: false, unknownBarcodes: Object.values(unknownState) });
+      set({ locations, sheetSchema, loading: false, unknownBarcodes: Object.values(unknownState) });
     } catch (e: any) {
       set({ loading: false, error: e?.message ?? 'Failed to load data' });
     }
-  },
-
-  pickAndLoadCSV: async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: 'text/comma-separated-values' });
-    if (result.canceled) return;
-    const uri = result.assets[0].uri;
-    await get().loadFromCSV(uri);
   },
 
   markDone: (barcode: string, locationId: string) => {
@@ -146,40 +120,30 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   setCurrentLocation: (id: string) => set({ currentLocationId: id }),
 
   generateReport: async () => {
-    const { backend, locations, unknownBarcodes, sessionScans, sheetSchema } = get();
-    if (backend === 'drive') {
-      if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
-      if (!sheetSchema) throw new Error('Master sheet schema not loaded; reload before submitting.');
+    const { locations, sessionScans, sheetSchema } = get();
+    if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
+    if (!sheetSchema) throw new Error('Master sheet schema not loaded; reload before submitting.');
 
-      if (sessionScans.length > 0) {
-        const displayName = await googleAuthService.getDisplayName();
-        if (!displayName) {
-          throw new Error('Could not determine signed-in Google account name. Reconnect Google Drive in Settings.');
-        }
-
-        const updatedAt = new Date().toISOString();
-        const updates: googleSheetsService.SheetRowUpdate[] = [];
-        for (const scan of sessionScans) {
-          const loc = locations.find(l => l.id === scan.locationId);
-          const item = loc?.items.find(i => i.barcode === scan.barcode);
-          if (!item || item.rowIndex == null) {
-            throw new Error('Some scanned items could not be matched to a master sheet row; submit aborted.');
-          }
-          updates.push({ rowIndex: item.rowIndex, updatedAt, updatedBy: displayName });
-        }
-
-        await googleSheetsService.updateRows(MASTER_SHEET_ID, sheetSchema, updates);
+    if (sessionScans.length > 0) {
+      const checkedBy = get().checkedByAlias || await googleAuthService.getDisplayName();
+      if (!checkedBy) {
+        throw new Error('Could not determine signed-in Google account name. Reconnect Google in Settings.');
       }
-    } else {
-      await exportReport(locations, unknownBarcodes);
+
+      const updatedAt = formatGMT8();
+      const updates: googleSheetsService.SheetRowUpdate[] = [];
+      for (const scan of sessionScans) {
+        const loc = locations.find(l => l.id === scan.locationId);
+        const item = loc?.items.find(i => i.barcode === scan.barcode);
+        if (!item || item.rowIndex == null) {
+          throw new Error('Some scanned items could not be matched to a master sheet row; submit aborted.');
+        }
+        updates.push({ rowIndex: item.rowIndex, updatedAt, updatedBy: checkedBy });
+      }
+
+      await googleSheetsService.updateRows(MASTER_SHEET_ID, sheetSchema, updates);
     }
     set({ sessionScans: [], sessionUnknownBarcodes: [] });
-  },
-
-  setBackend: async (backend: StorageBackend) => {
-    const settings = await loadSettings();
-    await saveSettings({ ...settings, backend });
-    set({ backend });
   },
 
   connectDrive: async () => {
@@ -191,5 +155,12 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
   disconnectDrive: async () => {
     await googleAuthService.signOut();
     set({ driveConnected: false, displayName: null, sheetSchema: null });
+  },
+
+  setCheckedByAlias: async (alias: string) => {
+    const trimmed = alias.trim();
+    const settings = await loadSettings();
+    await saveSettings({ ...settings, checkedByAlias: trimmed || undefined });
+    set({ checkedByAlias: trimmed || null });
   },
 }));

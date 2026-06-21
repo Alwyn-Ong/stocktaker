@@ -10,11 +10,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'LocationPicker'>;
 export default function LocationPickerScreen({ navigation }: Props) {
   const {
     locations, loading, error, currentLocationId,
-    loadFromCSV, pickAndLoadCSV, setCurrentLocation,
+    loadInventory, setCurrentLocation,
   } = useInventoryStore();
 
   useEffect(() => {
-    loadFromCSV();
+    loadInventory();
   }, []);
 
   useEffect(() => {
@@ -23,13 +23,9 @@ export default function LocationPickerScreen({ navigation }: Props) {
     }
   }, [locations, currentLocationId]);
 
-  async function handleImport() {
-    await pickAndLoadCSV();
-  }
-
   function handleOpen() {
     if (!currentLocationId) {
-      Alert.alert('No location selected', 'Import a CSV and select a location first.');
+      Alert.alert('No location selected', 'Select a location first.');
       return;
     }
     navigation.navigate('Inventory', { locationId: currentLocationId });
@@ -42,17 +38,14 @@ export default function LocationPickerScreen({ navigation }: Props) {
           <Text style={styles.backText}>{'‹ Back'}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Select Location</Text>
-        <TouchableOpacity onPress={handleImport} style={styles.importBtn}>
-          <Text style={styles.importBtnText}>Import CSV</Text>
-        </TouchableOpacity>
       </View>
 
       {loading && <ActivityIndicator style={styles.loader} size="large" color="#4CAF50" />}
 
       {error && !loading && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No inventory loaded.</Text>
-          <Text style={styles.emptySubText}>Tap "Import CSV" to get started.</Text>
+          <Text style={styles.emptyText}>Could not load inventory.</Text>
+          <Text style={styles.emptySubText}>{error}</Text>
         </View>
       )}
 
@@ -89,13 +82,6 @@ const styles = StyleSheet.create({
   backBtn: {},
   backText: { color: '#1565C0', fontSize: 16 },
   title: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
-  importBtn: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  importBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   loader: { marginTop: 40 },
   emptyState: { alignItems: 'center', marginTop: 80 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#555' },

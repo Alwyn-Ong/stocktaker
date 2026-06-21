@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
@@ -10,36 +10,25 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const {
-    backend, driveConnected, displayName,
-    setBackend, connectDrive, disconnectDrive, hydrateSettings,
+    driveConnected, displayName, checkedByAlias,
+    disconnectDrive, hydrateSettings, setCheckedByAlias,
   } = useInventoryStore();
 
-  const [busy, setBusy] = useState(false);
+  const [alias, setAlias] = useState('');
 
   useEffect(() => {
     hydrateSettings();
   }, []);
 
-  async function handleSelectLocal() {
-    await setBackend('local');
+  useEffect(() => {
+    setAlias(checkedByAlias ?? '');
+  }, [checkedByAlias]);
+
+  function handleAliasBlur() {
+    setCheckedByAlias(alias);
   }
 
-  async function handleSelectDrive() {
-    await setBackend('drive');
-  }
-
-  async function handleConnect() {
-    setBusy(true);
-    try {
-      await connectDrive();
-    } catch (e: any) {
-      Alert.alert('Connection failed', e?.message ?? 'Could not connect to Google Drive.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleDisconnect() {
+  async function handleSignOut() {
     await disconnectDrive();
   }
 
@@ -53,43 +42,29 @@ export default function SettingsScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.sectionLabel}>Storage</Text>
+        <Text style={styles.sectionLabel}>Checked by</Text>
+        <TextInput
+          style={styles.input}
+          value={alias}
+          onChangeText={setAlias}
+          onBlur={handleAliasBlur}
+          placeholder="Name shown on reports"
+          placeholderTextColor="#aaa"
+        />
 
-        <TouchableOpacity
-          style={[styles.option, backend === 'local' && styles.optionSelected]}
-          onPress={handleSelectLocal}
-        >
-          <Text style={styles.optionText}>Local file</Text>
-        </TouchableOpacity>
+        <Text style={[styles.sectionLabel, styles.accountLabel]}>Google account</Text>
 
-        <TouchableOpacity
-          style={[styles.option, backend === 'drive' && styles.optionSelected]}
-          onPress={handleSelectDrive}
-        >
-          <Text style={styles.optionText}>Google Drive</Text>
-        </TouchableOpacity>
-
-        {backend === 'drive' && (
-          <View style={styles.driveSection}>
-            {busy && <ActivityIndicator style={styles.loader} color="#4CAF50" />}
-
-            {!busy && !driveConnected && (
-              <TouchableOpacity style={styles.actionBtn} onPress={handleConnect}>
-                <Text style={styles.actionBtnText}>Connect Google Drive</Text>
-              </TouchableOpacity>
-            )}
-
-            {!busy && driveConnected && (
-              <>
-                <Text style={styles.fileLabel}>
-                  {displayName ? `Signed in as ${displayName}` : 'Signed in (name unavailable — reconnect to refresh)'}
-                </Text>
-                <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
-                  <Text style={styles.disconnectBtnText}>Disconnect</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+        {driveConnected ? (
+          <>
+            <Text style={styles.fileLabel}>
+              {displayName ? `Signed in as ${displayName}` : 'Signed in'}
+            </Text>
+            <TouchableOpacity style={styles.disconnectBtn} onPress={handleSignOut}>
+              <Text style={styles.disconnectBtnText}>Sign out</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <Text style={styles.fileLabel}>Not connected.</Text>
         )}
       </View>
     </View>
@@ -113,26 +88,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a' },
   content: { padding: 16 },
   sectionLabel: { fontSize: 14, fontWeight: '600', color: '#888', marginBottom: 8 },
-  option: {
+  accountLabel: { marginTop: 24 },
+  input: {
     backgroundColor: '#fff',
-    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
     borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  optionSelected: { borderColor: '#4CAF50' },
-  optionText: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
-  driveSection: { marginTop: 16 },
-  loader: { marginTop: 16 },
-  actionBtn: {
-    backgroundColor: '#1565C0',
     padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 8,
+    fontSize: 15,
+    color: '#1a1a1a',
   },
-  actionBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   disconnectBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
   disconnectBtnText: { color: '#f44336', fontWeight: '600', fontSize: 15 },
   fileLabel: { fontSize: 14, color: '#555', marginBottom: 8 },

@@ -31,8 +31,11 @@
 - OAuth scope narrowed from `https://www.googleapis.com/auth/drive` to `https://www.googleapis.com/auth/spreadsheets`, matching the Sheets-only API surface actually used (also a lower Google verification tier: "sensitive" rather than "restricted").
 - `app.config.js`: dropped the now-unused `scheme`/`GOOGLE_ANDROID_CLIENT_ID` config and the `expo-web-browser`/`expo-secure-store` plugins; added `ios.bundleIdentifier` (required by the new plugin's prebuild step) and the `@react-native-google-signin/google-signin` plugin.
 - `generateReport()` now clears `sessionScans`/`sessionUnknownBarcodes` after a successful submit (either backend); previously they were never cleared until app restart, so the Report screen kept showing already-submitted items. Still preserved on a failed submit, so the user can retry without re-scanning.
+- `inventoryStore.generateReport()`'s Drive "Updated At" stamp now uses `formatGMT8()` instead of `Date.toISOString()`.
+- `SettingsScreen` no longer has an inline "Connect Google" button (that action moved to `LandingScreen`); it now shows an editable "Checked by" alias field (persisted via `setCheckedByAlias`) and, when signed in, a "Sign out" action.
 
 ### Removed
 - "Qty: N" display from inventory item rows.
 - `LocationsScreen` and its `FlatList` of `LocationCard` rows (superseded by `LandingScreen` + `LocationPickerScreen`).
 - `googleDriveService.ts` and the Drive file browse/pick UI in `SettingsScreen` (superseded by `googleSheetsService` and the locked master sheet config). `driveFileId`/`driveFileName` removed from `Settings`.
+- Local CSV import/export backend: `csvService.parseCSV`/`loadCSV`, the `DocumentPicker`-based file picker on `LocationPickerScreen`, and `Settings.backend`/`StorageBackend`. The master Google Sheet is now the app's only data source.

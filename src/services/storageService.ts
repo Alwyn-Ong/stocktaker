@@ -4,15 +4,11 @@ import { STORAGE_KEY, SETTINGS_KEY, UNKNOWN_BARCODES_KEY } from '../constants';
 type DoneState = Record<string, number>; // key: `${barcode}_${locationId}`
 type UnknownBarcodeState = Record<string, { barcode: string; locationId: string }>; // key: `${barcode}_${locationId}`
 
-export type StorageBackend = 'local' | 'drive';
-
 export type Settings = {
-  backend: StorageBackend;
+  checkedByAlias?: string;
 };
 
-const DEFAULT_SETTINGS: Settings = {
-  backend: 'local',
-};
+const DEFAULT_SETTINGS: Settings = {};
 
 export async function loadSettings(): Promise<Settings> {
   const raw = await AsyncStorage.getItem(SETTINGS_KEY);

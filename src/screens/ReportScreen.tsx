@@ -5,6 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
 import { exportReport } from '../services/csvService';
+import { formatCheckedBy } from '../utils/checkedBy';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Report'>;
 
@@ -37,7 +38,7 @@ export default function ReportScreen({ navigation }: Props) {
   async function handlePrint() {
     setBusy(true);
     try {
-      await exportReport(locations, unknownBarcodes, checkedByAlias || displayName || '');
+      await exportReport(locations, unknownBarcodes, formatCheckedBy(displayName, checkedByAlias));
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Could not export report.');
     } finally {

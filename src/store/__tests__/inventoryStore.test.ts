@@ -227,7 +227,8 @@ describe('generateReport', () => {
     expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([]);
   });
 
-  it('updates the matching master sheet rows with a timestamp and the checked-by alias', async () => {
+  it('updates the matching master sheet rows with a timestamp and the Google name plus checked-by alias', async () => {
+    (googleAuthService.getDisplayName as jest.Mock).mockResolvedValue('Jane Doe');
     useInventoryStore.setState({
       checkedByAlias: 'JD',
       sheetSchema: { sheetTitle: 'Sheet1', columnIndex: {} as any },
@@ -244,12 +245,11 @@ describe('generateReport', () => {
 
     await useInventoryStore.getState().generateReport();
 
-    expect(googleAuthService.getDisplayName).not.toHaveBeenCalled();
     expect(googleSheetsService.updateRows).toHaveBeenCalledTimes(1);
     const [sheetId, , updates] = (googleSheetsService.updateRows as jest.Mock).mock.calls[0];
     expect(sheetId).toBe('test-sheet-id');
     expect(updates).toEqual([
-      { rowIndex: 5, updatedAt: expect.stringMatching(TIMESTAMP_RE), updatedBy: 'JD' },
+      { rowIndex: 5, updatedAt: expect.stringMatching(TIMESTAMP_RE), updatedBy: 'Jane Doe (JD)' },
     ]);
     expect(useInventoryStore.getState().sessionScans).toEqual([]);
     expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([]);
@@ -294,6 +294,27 @@ describe('generateReport', () => {
 
     const [, , updates] = (googleSheetsService.updateRows as jest.Mock).mock.calls[0];
     expect(updates[0].updatedBy).toBe('Jane Doe');
+  });
+
+  it('falls back to the checked-by alias when the Google display name is unavailable', async () => {
+    (googleAuthService.getDisplayName as jest.Mock).mockResolvedValue(null);
+    useInventoryStore.setState({
+      checkedByAlias: 'JD',
+      sheetSchema: { sheetTitle: 'Sheet1', columnIndex: {} as any },
+      locations: [
+        {
+          id: 'warehouse-a',
+          name: 'Warehouse A',
+          items: [{ barcode: '012345', name: 'Widget', description: '', done: true, rowIndex: 5 }],
+        },
+      ],
+      sessionScans: [{ barcode: '012345', locationId: 'warehouse-a', name: 'Widget' }],
+    });
+
+    await useInventoryStore.getState().generateReport();
+
+    const [, , updates] = (googleSheetsService.updateRows as jest.Mock).mock.calls[0];
+    expect(updates[0].updatedBy).toBe('JD');
   });
 
   it('throws when no alias is set and the Google display name cannot be determined', async () => {

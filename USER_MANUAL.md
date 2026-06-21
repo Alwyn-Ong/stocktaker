@@ -71,15 +71,16 @@ Three actions at the bottom:
   the session list is cleared and you're returned to the Landing screen. If
   submit fails, nothing is cleared so you can retry.
 
-The exported/submitted report uses the name set in **Checked by** (see below),
-falling back to your signed-in Google account name if that's blank.
+The exported/submitted report uses your signed-in Google account name, with
+the optional name set in **Settings** (see below) appended in parentheses.
 
 ## 5. Settings
 
 Reached via the gear icon on the Landing screen:
 
-- **Checked by** — a name or alias shown on reports instead of your Google
-  account name. Edits are saved when you tap away from the field.
+- **Name (optional)** — appended in parentheses after your Google account
+  name on the master sheet and reports, e.g. "Jane Doe (Warehouse 2)". Edits
+  are saved when you tap away from the field.
 - **Google account** — shows who's signed in, with a **Sign out** action.
   Signing out requires reconnecting before you can load inventory again.
 

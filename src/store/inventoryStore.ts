@@ -11,6 +11,7 @@ import {
 import * as googleAuthService from '../services/googleAuthService';
 import * as googleSheetsService from '../services/googleSheetsService';
 import { formatGMT8 } from '../utils/datetime';
+import { formatCheckedBy } from '../utils/checkedBy';
 
 const MASTER_SHEET_ID: string = Constants.expoConfig?.extra?.googleMasterSheetId ?? '';
 
@@ -141,7 +142,8 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
     if (!sheetSchema) throw new Error('Master sheet schema not loaded; reload before submitting.');
 
     if (sessionScans.length > 0) {
-      const checkedBy = get().checkedByAlias || await googleAuthService.getDisplayName();
+      const displayName = await googleAuthService.getDisplayName();
+      const checkedBy = formatCheckedBy(displayName, get().checkedByAlias);
       if (!checkedBy) {
         throw new Error('Could not determine signed-in Google account name. Reconnect Google in Settings.');
       }

@@ -42,15 +42,18 @@ export default function SettingsScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.sectionLabel}>Checked by</Text>
+        <Text style={styles.sectionLabel}>Name (optional)</Text>
         <TextInput
           style={styles.input}
           value={alias}
           onChangeText={setAlias}
           onBlur={handleAliasBlur}
-          placeholder="Name shown on reports"
+          placeholder="e.g. Warehouse 2"
           placeholderTextColor="#aaa"
         />
+        <Text style={styles.helperText}>
+          Added in parentheses after your Google account name — e.g. &quot;{displayName || 'Jane Doe'} (Warehouse 2)&quot; — on the master sheet and reports.
+        </Text>
 
         <Text style={[styles.sectionLabel, styles.accountLabel]}>Google account</Text>
 
@@ -98,6 +101,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1a1a1a',
   },
+  helperText: { fontSize: 12, color: '#999', marginTop: 8 },
   disconnectBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
   disconnectBtnText: { color: '#f44336', fontWeight: '600', fontSize: 15 },
   fileLabel: { fontSize: 14, color: '#555', marginBottom: 8 },

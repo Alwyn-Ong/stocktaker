@@ -4,13 +4,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
 import LocationDropdown from '../components/LocationDropdown';
+import DemoBanner from '../components/DemoBanner';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LocationPicker'>;
 
 export default function LocationPickerScreen({ navigation }: Props) {
   const {
     locations, loading, error, currentLocationId,
-    loadInventory, setCurrentLocation,
+    demoMode, loadInventory, setCurrentLocation, exitDemo,
   } = useInventoryStore();
 
   useEffect(() => {
@@ -23,6 +24,12 @@ export default function LocationPickerScreen({ navigation }: Props) {
     }
   }, [locations, currentLocationId]);
 
+  async function handleBack() {
+    // Leaving the picker ends the demo so Landing never shows real-app UI over demo state.
+    if (demoMode) await exitDemo();
+    navigation.goBack();
+  }
+
   function handleOpen() {
     if (!currentLocationId) {
       Alert.alert('No location selected', 'Select a location first.');
@@ -34,11 +41,12 @@ export default function LocationPickerScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.headerBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Text style={styles.backText}>{'‹ Back'}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Select Location</Text>
       </View>
+      <DemoBanner />
 
       {loading && <ActivityIndicator style={styles.loader} size="large" color="#4CAF50" />}
 

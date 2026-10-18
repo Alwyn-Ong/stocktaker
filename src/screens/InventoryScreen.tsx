@@ -9,7 +9,10 @@ import { Item } from '../types';
 import { useInventoryStore } from '../store/inventoryStore';
 import ItemRow, { Mismatch } from '../components/ItemRow';
 import LocationDropdown from '../components/LocationDropdown';
-import { exportReport } from '../services/csvService';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import DemoBanner from '../components/DemoBanner';
+import { exportReport, serializeReport } from '../services/csvService';
 import { toLocationId } from '../services/googleSheetsService';
 import { formatCheckedBy } from '../utils/checkedBy';
 
@@ -23,6 +26,7 @@ export default function InventoryScreen({ navigation, route }: Props) {
   const checkedByAlias = useInventoryStore(s => s.checkedByAlias);
   const displayName = useInventoryStore(s => s.displayName);
   const loading = useInventoryStore(s => s.loading);
+  const demoMode = useInventoryStore(s => s.demoMode);
   const setCurrentLocation = useInventoryStore(s => s.setCurrentLocation);
   const loadInventory = useInventoryStore(s => s.loadInventory);
   const generateReport = useInventoryStore(s => s.generateReport);
@@ -76,6 +80,16 @@ export default function InventoryScreen({ navigation, route }: Props) {
     try {
       const checkedBy = formatCheckedBy(displayName, checkedByAlias);
       const locationUnknowns = unknownBarcodes.filter(u => u.locationId === locationId);
+      if (demoMode) {
+        const csv = serializeReport([location], locationUnknowns, checkedBy, locations);
+        const file = new File(Paths.cache, `demo-report-${locationId}.csv`);
+        if (file.exists) file.delete();
+        file.create();
+        file.write(csv);
+        await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
+        await flushUnknownBarcodes(locationId);
+        return;
+      }
       await exportReport([location], locationUnknowns, checkedBy, locations);
       await flushUnknownBarcodes(locationId);
       Alert.alert('Report uploaded', `${location.name} report has been uploaded to the reports folder.`);
@@ -90,7 +104,12 @@ export default function InventoryScreen({ navigation, route }: Props) {
     setBusy(true);
     try {
       await generateReport(locationId);
-      Alert.alert('Report submitted', `${location!.name} has been updated on the master file.`);
+      Alert.alert(
+        demoMode ? 'Report submitted (demo)' : 'Report submitted',
+        demoMode
+          ? `${location!.name} has been updated locally.`
+          : `${location!.name} has been updated on the master file.`
+      );
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Could not generate report.');
     } finally {
@@ -115,6 +134,7 @@ export default function InventoryScreen({ navigation, route }: Props) {
           onSelect={handleSwitchLocation}
         />
       </View>
+      <DemoBanner />
 
       <FlatList
         data={listData}

@@ -10,7 +10,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const {
-    driveConnected, displayName, checkedByAlias,
+    driveConnected, displayName, checkedByAlias, demoMode, exitDemo,
     disconnectDrive, hydrateSettings, setCheckedByAlias,
   } = useInventoryStore();
 
@@ -57,7 +57,14 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <Text style={[styles.sectionLabel, styles.accountLabel]}>Google account</Text>
 
-        {driveConnected ? (
+        {demoMode ? (
+          <>
+            <Text style={styles.fileLabel}>Demo mode ({displayName})</Text>
+            <TouchableOpacity style={styles.disconnectBtn} onPress={exitDemo}>
+              <Text style={styles.disconnectBtnText}>Exit demo</Text>
+            </TouchableOpacity>
+          </>
+        ) : driveConnected ? (
           <>
             <Text style={styles.fileLabel}>
               {displayName ? `Signed in as ${displayName}` : 'Signed in'}

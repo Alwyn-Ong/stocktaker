@@ -3,10 +3,15 @@
 ## Unreleased
 
 ### Added
+- Demo mode: a "Try Demo" button on the Landing screen loads a built-in sample inventory (`src/demo/demoData.ts`, including one item out of place each way) with no Google sign-in, master sheet or Drive. Session-only `demoMode` state plus `startDemo()`/`exitDemo()` in `inventoryStore`; load, scan, submit and unknown-barcode actions branch to local-only behaviour without touching AsyncStorage or Google APIs. New `DemoBanner` (with "Exit demo") on the picker and inventory screens, "Simulate item"/"Simulate unknown" buttons on the Scanner (with a placeholder when no camera permission), demo-mode Upload that writes the CSV to cache and opens the share sheet, and a Settings demo entry with "Exit demo".
+- `docs/demo.gif` and `docs/demo.mp4`: screen recording of the demo flow, embedded in the README's Demo mode section, which now also notes that the recording skips Upload because it opens the share sheet.
 - `README.md` with setup, Google Cloud/master-sheet requirements, and build instructions.
 - `scripts/apply-branding.sh`: copies private artwork from the gitignored `branding/` directory over the placeholder icons in `assets/` (marking them `skip-worktree` so they can't be committed), with `--undo` to restore.
 
 ### Changed
+- The "Try Demo" button is hidden unless the app is built with `ENABLE_DEMO=1` (exposed as `extra.demoEnabled` in `app.config.js`, listed in `.env.local.example`), so regular builds don't show it.
+- Pressing Back on the Location Picker in demo mode now exits the demo (`LocationPickerScreen.handleBack` calls `exitDemo()` before `goBack()`), so Landing no longer shows the real-app screen while `demoMode` is still active.
+- `ScannerScreen` requests camera permission once per mount instead of on every permission-state change, which re-prompted in a loop after a denial.
 - Repo prepared for public release: `assets/` is no longer gitignored and holds generic placeholder icons (private artwork lives in `branding/`); `app.config.js` defaults `APP_NAME` to `Stocktaker`; `LICENSE` copyright updated; personal paths, email and Drive folder id removed from `ANDROID_DEV.md`/`RELEASE.md`; `.gitignore` now ignores `branding/`, `*.pptx` and `*:Zone.Identifier` files.
 
 ## 1.1.0 — 2026-07-09

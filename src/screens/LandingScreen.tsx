@@ -10,9 +10,10 @@ import { useInventoryStore } from '../store/inventoryStore';
 type Props = NativeStackScreenProps<RootStackParamList, 'Landing'>;
 
 const APP_NAME: string = Constants.expoConfig?.extra?.appName ?? 'Stocktaker';
+const DEMO_ENABLED: boolean = Constants.expoConfig?.extra?.demoEnabled === true;
 
 export default function LandingScreen({ navigation }: Props) {
-  const { driveConnected, displayName, hydrateSettings, connectDrive } = useInventoryStore();
+  const { driveConnected, displayName, hydrateSettings, connectDrive, startDemo } = useInventoryStore();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -32,6 +33,11 @@ export default function LandingScreen({ navigation }: Props) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleDemo() {
+    startDemo();
+    navigation.navigate('LocationPicker');
   }
 
   useEffect(() => {
@@ -70,6 +76,12 @@ export default function LandingScreen({ navigation }: Props) {
             </Text>
           </TouchableOpacity>
         )}
+
+        {DEMO_ENABLED && !busy && (
+          <TouchableOpacity style={styles.demoBtn} onPress={handleDemo}>
+            <Text style={styles.demoBtnText}>Try Demo</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -104,5 +116,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
+  demoBtn: { marginTop: 16, paddingHorizontal: 40, paddingVertical: 12 },
+  demoBtnText: { color: '#1565C0', fontSize: 15, fontWeight: '600' },
   continueBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

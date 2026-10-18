@@ -575,3 +575,61 @@ describe('setCheckedByAlias', () => {
     expect(useInventoryStore.getState().checkedByAlias).toBeNull();
   });
 });
+
+describe('demo mode', () => {
+  beforeEach(() => {
+    useInventoryStore.setState({ demoMode: false, driveConnected: false, displayName: null });
+  });
+
+  it('startDemo then loadInventory seeds sample data without touching Sheets', async () => {
+    useInventoryStore.getState().startDemo();
+    await useInventoryStore.getState().loadInventory();
+
+    const state = useInventoryStore.getState();
+    expect(state.demoMode).toBe(true);
+    expect(state.displayName).toBe('Demo User');
+    expect(state.locations.length).toBeGreaterThan(0);
+    expect(googleSheetsService.fetchLocationsFromSheet).not.toHaveBeenCalled();
+  });
+
+  it('recordScan does not persist session scans', async () => {
+    useInventoryStore.getState().startDemo();
+    await useInventoryStore.getState().loadInventory();
+    const { locations } = useInventoryStore.getState();
+    const item = locations[0].items.find(i => !i.done)!;
+
+    useInventoryStore.getState().recordScan(item.barcode, locations[0].id);
+    await flush();
+
+    expect(useInventoryStore.getState().sessionScans).toHaveLength(1);
+    expect(saveSessionScans).not.toHaveBeenCalled();
+  });
+
+  it('generateReport marks scanned items done locally with no Sheets writes', async () => {
+    useInventoryStore.getState().startDemo();
+    await useInventoryStore.getState().loadInventory();
+    const { locations } = useInventoryStore.getState();
+    const loc = locations[0];
+    const item = loc.items.find(i => !i.done)!;
+
+    useInventoryStore.getState().recordScan(item.barcode, loc.id);
+    await useInventoryStore.getState().generateReport(loc.id);
+
+    const updated = useInventoryStore.getState().locations[0].items.find(i => i.barcode === item.barcode)!;
+    expect(updated.done).toBe(true);
+    expect(useInventoryStore.getState().sessionScans).toHaveLength(0);
+    expect(googleSheetsService.updateRows).not.toHaveBeenCalled();
+    expect(googleSheetsService.appendUnknownBarcodes).not.toHaveBeenCalled();
+  });
+
+  it('exitDemo clears demo state', async () => {
+    useInventoryStore.getState().startDemo();
+    await useInventoryStore.getState().loadInventory();
+    await useInventoryStore.getState().exitDemo();
+
+    const state = useInventoryStore.getState();
+    expect(state.demoMode).toBe(false);
+    expect(state.locations).toEqual([]);
+    expect(state.displayName).not.toBe('Demo User');
+  });
+});

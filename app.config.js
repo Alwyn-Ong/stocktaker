@@ -30,6 +30,7 @@ module.exports = {
     plugins: ['expo-camera', 'expo-sharing', '@react-native-google-signin/google-signin'],
     extra: {
       appName: APP_NAME,
+      demoEnabled: process.env.ENABLE_DEMO === '1',
       googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID ?? '',
       googleMasterSheetId: process.env.GOOGLE_MASTER_SHEET_ID ?? '',
       googleReportFolderId: process.env.GOOGLE_REPORT_FOLDER_ID ?? '',

@@ -12,6 +12,7 @@ import * as googleAuthService from '../services/googleAuthService';
 import * as googleSheetsService from '../services/googleSheetsService';
 import { formatGMT8 } from '../utils/datetime';
 import { formatCheckedBy } from '../utils/checkedBy';
+import { buildDemoLocations, DEMO_DISPLAY_NAME } from '../demo/demoData';
 
 const MASTER_SHEET_ID: string = Constants.expoConfig?.extra?.googleMasterSheetId ?? '';
 
@@ -28,6 +29,9 @@ type InventoryStore = {
   displayName: string | null;
   checkedByAlias: string | null;
   sheetSchema: googleSheetsService.SheetSchema | null;
+  // Demo Mode: sample inventory held in memory only; nothing touches Google or
+  // persisted session storage.
+  demoMode: boolean;
 
   hydrateSettings: () => Promise<void>;
   loadInventory: () => Promise<void>;
@@ -40,6 +44,8 @@ type InventoryStore = {
   connectDrive: () => Promise<void>;
   disconnectDrive: () => Promise<void>;
   setCheckedByAlias: (alias: string) => Promise<void>;
+  startDemo: () => void;
+  exitDemo: () => Promise<void>;
 };
 
 export const useInventoryStore = create<InventoryStore>((set, get) => {
@@ -47,8 +53,15 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
   // tab, then drops every unknown for that location from state and storage —
   // once the sheet has them, the app no longer needs to remember them.
   async function submitLocationUnknowns(locationId: string, recordedAt: string, recordedBy: string): Promise<void> {
-    const { locations, sessionUnknownBarcodes } = get();
+    const { locations, sessionUnknownBarcodes, demoMode } = get();
     const unknowns = sessionUnknownBarcodes.filter(u => u.locationId === locationId);
+    if (demoMode) {
+      set({
+        unknownBarcodes: get().unknownBarcodes.filter(u => u.locationId !== locationId),
+        sessionUnknownBarcodes: sessionUnknownBarcodes.filter(u => u.locationId !== locationId),
+      });
+      return;
+    }
     if (unknowns.length > 0) {
       const rows = unknowns.map(u => ({
         location: locations.find(l => l.id === u.locationId)?.name ?? u.locationId,
@@ -84,8 +97,14 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
   displayName: null,
   checkedByAlias: null,
   sheetSchema: null,
+  demoMode: false,
 
   hydrateSettings: async () => {
+    if (get().demoMode) {
+      const settings = await loadSettings();
+      set({ checkedByAlias: settings.checkedByAlias ?? null });
+      return;
+    }
     const driveConnected = await googleAuthService.isSignedIn();
     const displayName = driveConnected ? await googleAuthService.getDisplayName() : null;
     const settings = await loadSettings();
@@ -93,6 +112,12 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
   },
 
   loadInventory: async () => {
+    if (get().demoMode) {
+      // Keep demo progress across screens; only seed on first load.
+      if (get().locations.length === 0) set({ locations: buildDemoLocations() });
+      set({ loading: false, error: null });
+      return;
+    }
     set({ loading: true, error: null });
     try {
       if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
@@ -150,7 +175,7 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
       { barcode, locationId, name: item.name },
     ];
     set({ locations: nextLocations, sessionScans: nextScans });
-    saveSessionScans(nextScans);
+    if (!get().demoMode) saveSessionScans(nextScans);
   },
 
   recordUnknownBarcode: (barcode: string, locationId: string) => {
@@ -160,6 +185,7 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
     const next = [...unknownBarcodes, { barcode, locationId }];
     const nextSession = [...sessionUnknownBarcodes, { barcode, locationId }];
     set({ unknownBarcodes: next, sessionUnknownBarcodes: nextSession });
+    if (get().demoMode) return;
     saveSessionUnknownBarcodes(nextSession);
 
     loadUnknownBarcodes().then(state => {
@@ -171,7 +197,28 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
   setCurrentLocation: (id: string) => set({ currentLocationId: id }),
 
   generateReport: async (locationId: string) => {
-    const { locations, sessionScans, sessionUnknownBarcodes, sheetSchema } = get();
+    const { locations, sessionScans, sessionUnknownBarcodes, sheetSchema, demoMode } = get();
+    if (demoMode) {
+      // Same local outcome as a real submit, minus the sheet write.
+      const scans = sessionScans.filter(s => s.locationId === locationId);
+      const updatedAt = formatGMT8();
+      const checkedBy = formatCheckedBy(DEMO_DISPLAY_NAME, get().checkedByAlias);
+      const locationName = locations.find(l => l.id === locationId)?.name ?? locationId;
+      const submittedBarcodes = new Set(scans.map(s => s.barcode));
+      set({
+        locations: locations.map(l => ({
+          ...l,
+          items: l.items.map(i =>
+            submittedBarcodes.has(i.barcode)
+              ? { ...i, done: true, updatedAt, checkedBy, currentLocation: locationName }
+              : i
+          ),
+        })),
+        sessionScans: sessionScans.filter(s => s.locationId !== locationId),
+      });
+      await submitLocationUnknowns(locationId, updatedAt, checkedBy);
+      return;
+    }
     if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
     if (!sheetSchema) throw new Error('Master sheet schema not loaded; reload before submitting.');
 
@@ -224,6 +271,10 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
   },
 
   flushUnknownBarcodes: async (locationId: string) => {
+    if (get().demoMode) {
+      await submitLocationUnknowns(locationId, formatGMT8(), '');
+      return;
+    }
     if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
     let checkedBy = '';
     if (get().sessionUnknownBarcodes.some(u => u.locationId === locationId)) {
@@ -252,6 +303,34 @@ export const useInventoryStore = create<InventoryStore>((set, get) => {
     const settings = await loadSettings();
     await saveSettings({ ...settings, checkedByAlias: trimmed || undefined });
     set({ checkedByAlias: trimmed || null });
+  },
+
+  startDemo: () => {
+    set({
+      demoMode: true,
+      driveConnected: true,
+      displayName: DEMO_DISPLAY_NAME,
+      locations: [],
+      currentLocationId: null,
+      error: null,
+      unknownBarcodes: [],
+      sessionScans: [],
+      sessionUnknownBarcodes: [],
+      sheetSchema: null,
+    });
+  },
+
+  exitDemo: async () => {
+    set({
+      demoMode: false,
+      locations: [],
+      currentLocationId: null,
+      error: null,
+      unknownBarcodes: [],
+      sessionScans: [],
+      sessionUnknownBarcodes: [],
+    });
+    await get().hydrateSettings();
   },
   };
 });

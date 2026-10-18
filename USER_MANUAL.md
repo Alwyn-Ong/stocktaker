@@ -112,6 +112,21 @@ Reached via the gear icon on the Landing screen:
 - **Google account** — shows who's signed in, with a **Sign out** action.
   Signing out requires reconnecting before you can load inventory again.
 
+## 6. Demo mode
+
+Where enabled (builds made with `ENABLE_DEMO=1`), tap **Try Demo** on the Landing screen to explore the app with built-in sample
+inventory — no Google sign-in, master sheet or Drive needed. An amber banner
+("Demo mode — sample data, nothing is saved") is shown on the location and
+inventory screens.
+
+- **Scanning** — the Scanner shows **Simulate item** (scans a random pending
+  item) and **Simulate unknown** (scans a barcode not in the inventory) buttons.
+- **Submit** — marks scanned items done locally only; nothing is written anywhere.
+- **Upload** — builds the CSV report and opens the share sheet instead of
+  uploading to Drive.
+- **Exit** — tap **Exit demo** on the banner or in Settings, or press **Back**
+  on the location screen, to return to the Landing screen. Demo data is discarded.
+
 ## Troubleshooting
 
 - **"Google master sheet is not configured"** — the app isn't set up with a

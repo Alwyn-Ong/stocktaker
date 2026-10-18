@@ -53,6 +53,16 @@ The first sheet tab needs a header row containing these columns (any order):
 One row per item. An "Unknown Barcodes" tab is created automatically on first
 submit. Sample data lives in [`test-data/`](test-data).
 
+## Demo
+
+[![Demo walkthrough](docs/demo.gif)](docs/demo.mp4)
+
+Build with `ENABLE_DEMO=1` (see `.env.local.example`) to show a **Try Demo**
+button on the Landing screen. Tap it to run the whole flow (pick location,
+simulate scans, Submit, Upload) against built-in sample data, with no Google
+account or master sheet. Nothing is saved or sent anywhere. Upload opens the
+system share sheet with the CSV, so the recording above skips it.
+
 ## Running
 
 ```bash

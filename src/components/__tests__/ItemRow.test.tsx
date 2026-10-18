@@ -25,4 +25,26 @@ describe('ItemRow', () => {
 
     expect(screen.queryByText('A small widget')).toBeNull();
   });
+
+  it('shows where the item currently is when it has moved away', async () => {
+    await render(
+      <ItemRow item={makeItem()} mismatch={{ type: 'currently-in', locationName: 'Warehouse B' }} />
+    );
+
+    expect(screen.getByText('⚠ Currently in: Warehouse B')).toBeTruthy();
+  });
+
+  it('shows where the item belongs when it is here from another location', async () => {
+    await render(
+      <ItemRow item={makeItem()} mismatch={{ type: 'belongs-in', locationName: 'Warehouse B' }} />
+    );
+
+    expect(screen.getByText('⚠ Belongs in: Warehouse B')).toBeTruthy();
+  });
+
+  it('renders no mismatch badge when the item is where it belongs', async () => {
+    await render(<ItemRow item={makeItem()} />);
+
+    expect(screen.queryByText(/⚠/)).toBeNull();
+  });
 });

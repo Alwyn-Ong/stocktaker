@@ -26,12 +26,14 @@ jest.mock('../../services/googleSheetsService', () => ({
   getSheetSchema: jest.fn(),
   fetchLocationsFromSheet: jest.fn(),
   updateRows: jest.fn().mockResolvedValue(undefined),
+  appendUnknownBarcodes: jest.fn().mockResolvedValue(undefined),
   columnIndexToLetter: jest.fn(),
+  toLocationId: (name: string) => name.toLowerCase().replace(/\s+/g, '-'),
 }));
 
 import { useInventoryStore } from '../inventoryStore';
 import {
-  loadUnknownBarcodes, loadSettings, saveSettings,
+  loadUnknownBarcodes, saveUnknownBarcodes, loadSettings, saveSettings,
   loadSessionScans, saveSessionScans, saveSessionUnknownBarcodes,
 } from '../../services/storageService';
 import * as googleAuthService from '../../services/googleAuthService';
@@ -141,18 +143,19 @@ describe('loadInventory', () => {
   });
 });
 
-describe('markDone', () => {
-  it('marks an unscanned item done and queues it for submission', async () => {
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
+describe('recordScan', () => {
+  it('marks an unscanned item done, stamps its current location, and queues it for submission', async () => {
+    useInventoryStore.getState().recordScan('012345', 'warehouse-a');
     await flush();
 
     const item = useInventoryStore.getState().locations[0].items[0];
     expect(item.done).toBe(true);
+    expect(item.currentLocation).toBe('Warehouse A');
     expect(saveSessionScans).toHaveBeenCalledTimes(1);
   });
 
   it('appends to sessionScans', async () => {
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
+    useInventoryStore.getState().recordScan('012345', 'warehouse-a');
     await flush();
 
     expect(useInventoryStore.getState().sessionScans).toEqual([
@@ -160,29 +163,72 @@ describe('markDone', () => {
     ]);
   });
 
-  it('is a no-op when the item is already done and still pending submission', async () => {
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
-    await flush();
-    jest.clearAllMocks();
-
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
+  it('keeps a single queued scan when re-scanned at the same location', async () => {
+    useInventoryStore.getState().recordScan('012345', 'warehouse-a');
     await flush();
 
-    expect(saveSessionScans).not.toHaveBeenCalled();
-    expect(useInventoryStore.getState().sessionScans).toHaveLength(1);
+    useInventoryStore.getState().recordScan('012345', 'warehouse-a');
+    await flush();
+
+    expect(useInventoryStore.getState().sessionScans).toEqual([
+      { barcode: '012345', locationId: 'warehouse-a', name: 'Widget' },
+    ]);
   });
 
-  it('is a true no-op once the item has been confirmed submitted', async () => {
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
+  it('is a true no-op once the item has been confirmed submitted at that location', async () => {
+    useInventoryStore.getState().recordScan('012345', 'warehouse-a');
     await flush();
     useInventoryStore.setState({ sessionScans: [] }); // submit succeeded; sheet now confirms this row
     jest.clearAllMocks();
 
-    useInventoryStore.getState().markDone('012345', 'warehouse-a');
+    useInventoryStore.getState().recordScan('012345', 'warehouse-a');
     await flush();
 
     expect(saveSessionScans).not.toHaveBeenCalled();
     expect(useInventoryStore.getState().sessionScans).toEqual([]);
+  });
+
+  it('records a scan at another location, moving the queued scan and current location there', async () => {
+    useInventoryStore.setState({
+      locations: [
+        ...useInventoryStore.getState().locations,
+        { id: 'warehouse-b', name: 'Warehouse B', items: [] },
+      ],
+    });
+
+    useInventoryStore.getState().recordScan('012345', 'warehouse-a');
+    await flush();
+    useInventoryStore.getState().recordScan('012345', 'warehouse-b');
+    await flush();
+
+    const item = useInventoryStore.getState().locations[0].items[0];
+    expect(item.done).toBe(true);
+    expect(item.currentLocation).toBe('Warehouse B');
+    expect(useInventoryStore.getState().sessionScans).toEqual([
+      { barcode: '012345', locationId: 'warehouse-b', name: 'Widget' },
+    ]);
+  });
+
+  it('re-records a sheet-confirmed item when scanned at a different location', async () => {
+    useInventoryStore.setState({
+      locations: [
+        {
+          id: 'warehouse-a',
+          name: 'Warehouse A',
+          items: [{ barcode: '012345', name: 'Widget', description: '', done: true, rowIndex: 2 }],
+        },
+        { id: 'warehouse-b', name: 'Warehouse B', items: [] },
+      ],
+    });
+
+    useInventoryStore.getState().recordScan('012345', 'warehouse-b');
+    await flush();
+
+    const item = useInventoryStore.getState().locations[0].items[0];
+    expect(item.currentLocation).toBe('Warehouse B');
+    expect(useInventoryStore.getState().sessionScans).toEqual([
+      { barcode: '012345', locationId: 'warehouse-b', name: 'Widget' },
+    ]);
   });
 });
 
@@ -220,7 +266,7 @@ describe('generateReport', () => {
   it('does nothing but clear the session when nothing was scanned', async () => {
     useInventoryStore.setState({ sheetSchema: { sheetTitle: 'Sheet1', columnIndex: {} as any } });
 
-    await useInventoryStore.getState().generateReport();
+    await useInventoryStore.getState().generateReport('warehouse-a');
 
     expect(googleSheetsService.updateRows).not.toHaveBeenCalled();
     expect(useInventoryStore.getState().sessionScans).toEqual([]);
@@ -243,16 +289,98 @@ describe('generateReport', () => {
       sessionUnknownBarcodes: [{ barcode: '999999999999', locationId: 'warehouse-a' }],
     });
 
-    await useInventoryStore.getState().generateReport();
+    await useInventoryStore.getState().generateReport('warehouse-a');
 
     expect(googleSheetsService.updateRows).toHaveBeenCalledTimes(1);
     const [sheetId, , updates] = (googleSheetsService.updateRows as jest.Mock).mock.calls[0];
     expect(sheetId).toBe('test-sheet-id');
     expect(updates).toEqual([
-      { rowIndex: 5, updatedAt: expect.stringMatching(TIMESTAMP_RE), updatedBy: 'Jane Doe (JD)' },
+      { rowIndex: 5, updatedAt: expect.stringMatching(TIMESTAMP_RE), updatedBy: 'Jane Doe (JD)', currentLocation: 'Warehouse A' },
     ]);
     expect(useInventoryStore.getState().sessionScans).toEqual([]);
     expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([]);
+  });
+
+  it('appends session unknown barcodes to the dedicated sheet, resolving location names', async () => {
+    (googleAuthService.getDisplayName as jest.Mock).mockResolvedValue('Jane Doe');
+    useInventoryStore.setState({
+      checkedByAlias: null,
+      sheetSchema: { sheetTitle: 'Sheet1', columnIndex: {} as any },
+      locations: [{ id: 'warehouse-a', name: 'Warehouse A', items: [] }],
+      sessionScans: [],
+      sessionUnknownBarcodes: [{ barcode: '999999999999', locationId: 'warehouse-a' }],
+    });
+
+    await useInventoryStore.getState().generateReport('warehouse-a');
+
+    expect(googleSheetsService.updateRows).not.toHaveBeenCalled();
+    expect(googleSheetsService.appendUnknownBarcodes).toHaveBeenCalledTimes(1);
+    const [sheetId, rows, recordedAt, recordedBy] =
+      (googleSheetsService.appendUnknownBarcodes as jest.Mock).mock.calls[0];
+    expect(sheetId).toBe('test-sheet-id');
+    expect(rows).toEqual([{ location: 'Warehouse A', barcode: '999999999999' }]);
+    expect(recordedAt).toEqual(expect.stringMatching(TIMESTAMP_RE));
+    expect(recordedBy).toBe('Jane Doe');
+  });
+
+  it('clears persisted unknown barcodes for the submitted location only', async () => {
+    (googleAuthService.getDisplayName as jest.Mock).mockResolvedValue('Jane Doe');
+    (loadUnknownBarcodes as jest.Mock).mockResolvedValue({
+      '999999999999_warehouse-a': { barcode: '999999999999', locationId: 'warehouse-a' },
+      '888888888888_warehouse-b': { barcode: '888888888888', locationId: 'warehouse-b' },
+    });
+    useInventoryStore.setState({
+      checkedByAlias: null,
+      sheetSchema: { sheetTitle: 'Sheet1', columnIndex: {} as any },
+      locations: [{ id: 'warehouse-a', name: 'Warehouse A', items: [] }],
+      sessionScans: [],
+      sessionUnknownBarcodes: [{ barcode: '999999999999', locationId: 'warehouse-a' }],
+      unknownBarcodes: [
+        { barcode: '999999999999', locationId: 'warehouse-a' },
+        { barcode: '888888888888', locationId: 'warehouse-b' },
+      ],
+    });
+
+    await useInventoryStore.getState().generateReport('warehouse-a');
+
+    expect(saveUnknownBarcodes).toHaveBeenCalledWith({
+      '888888888888_warehouse-b': { barcode: '888888888888', locationId: 'warehouse-b' },
+    });
+    expect(useInventoryStore.getState().unknownBarcodes).toEqual([
+      { barcode: '888888888888', locationId: 'warehouse-b' },
+    ]);
+    expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([]);
+  });
+
+  it('only submits and clears the given location, leaving other locations queued', async () => {
+    (googleAuthService.getDisplayName as jest.Mock).mockResolvedValue('Jane Doe');
+    useInventoryStore.setState({
+      checkedByAlias: null,
+      sheetSchema: { sheetTitle: 'Sheet1', columnIndex: {} as any },
+      locations: [
+        { id: 'warehouse-a', name: 'Warehouse A', items: [{ barcode: '012345', name: 'Widget', description: '', done: true, rowIndex: 5 }] },
+        { id: 'warehouse-b', name: 'Warehouse B', items: [{ barcode: '067890', name: 'Gadget', description: '', done: true, rowIndex: 9 }] },
+      ],
+      sessionScans: [
+        { barcode: '012345', locationId: 'warehouse-a', name: 'Widget' },
+        { barcode: '067890', locationId: 'warehouse-b', name: 'Gadget' },
+      ],
+      sessionUnknownBarcodes: [{ barcode: '999999999999', locationId: 'warehouse-b' }],
+    });
+
+    await useInventoryStore.getState().generateReport('warehouse-a');
+
+    const [, , updates] = (googleSheetsService.updateRows as jest.Mock).mock.calls[0];
+    expect(updates).toEqual([
+      { rowIndex: 5, updatedAt: expect.stringMatching(TIMESTAMP_RE), updatedBy: 'Jane Doe', currentLocation: 'Warehouse A' },
+    ]);
+    expect(googleSheetsService.appendUnknownBarcodes).not.toHaveBeenCalled();
+    expect(useInventoryStore.getState().sessionScans).toEqual([
+      { barcode: '067890', locationId: 'warehouse-b', name: 'Gadget' },
+    ]);
+    expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([
+      { barcode: '999999999999', locationId: 'warehouse-b' },
+    ]);
   });
 
   it('persists the cleared session lists after a successful submit', async () => {
@@ -269,7 +397,7 @@ describe('generateReport', () => {
       sessionScans: [{ barcode: '012345', locationId: 'warehouse-a', name: 'Widget' }],
     });
 
-    await useInventoryStore.getState().generateReport();
+    await useInventoryStore.getState().generateReport('warehouse-a');
 
     expect(saveSessionScans).toHaveBeenCalledWith([]);
     expect(saveSessionUnknownBarcodes).toHaveBeenCalledWith([]);
@@ -290,7 +418,7 @@ describe('generateReport', () => {
       sessionScans: [{ barcode: '012345', locationId: 'warehouse-a', name: 'Widget' }],
     });
 
-    await useInventoryStore.getState().generateReport();
+    await useInventoryStore.getState().generateReport('warehouse-a');
 
     const [, , updates] = (googleSheetsService.updateRows as jest.Mock).mock.calls[0];
     expect(updates[0].updatedBy).toBe('Jane Doe');
@@ -311,7 +439,7 @@ describe('generateReport', () => {
       sessionScans: [{ barcode: '012345', locationId: 'warehouse-a', name: 'Widget' }],
     });
 
-    await useInventoryStore.getState().generateReport();
+    await useInventoryStore.getState().generateReport('warehouse-a');
 
     const [, , updates] = (googleSheetsService.updateRows as jest.Mock).mock.calls[0];
     expect(updates[0].updatedBy).toBe('JD');
@@ -325,7 +453,7 @@ describe('generateReport', () => {
       sessionScans: [{ barcode: '012345', locationId: 'warehouse-a', name: 'Widget' }],
     });
 
-    await expect(useInventoryStore.getState().generateReport()).rejects.toThrow(
+    await expect(useInventoryStore.getState().generateReport('warehouse-a')).rejects.toThrow(
       'Could not determine signed-in Google account name. Reconnect Google in Settings.'
     );
     expect(googleSheetsService.updateRows).not.toHaveBeenCalled();
@@ -345,7 +473,7 @@ describe('generateReport', () => {
       sessionScans: [{ barcode: '012345', locationId: 'warehouse-a', name: 'Widget' }],
     });
 
-    await expect(useInventoryStore.getState().generateReport()).rejects.toThrow(
+    await expect(useInventoryStore.getState().generateReport('warehouse-a')).rejects.toThrow(
       'Some scanned items could not be matched to a master sheet row; submit aborted.'
     );
     expect(googleSheetsService.updateRows).not.toHaveBeenCalled();
@@ -361,9 +489,55 @@ describe('generateReport', () => {
       sessionScans: [{ barcode: '012345', locationId: 'warehouse-a', name: 'Widget' }],
     });
 
-    await expect(useInventoryStore.getState().generateReport()).rejects.toThrow(
+    await expect(useInventoryStore.getState().generateReport('warehouse-a')).rejects.toThrow(
       'Master sheet schema not loaded; reload before submitting.'
     );
+  });
+});
+
+describe('flushUnknownBarcodes', () => {
+  it('appends session unknowns to the sheet and clears them for the location', async () => {
+    (googleAuthService.getDisplayName as jest.Mock).mockResolvedValue('Jane Doe');
+    (loadUnknownBarcodes as jest.Mock).mockResolvedValue({
+      '999999999999_warehouse-a': { barcode: '999999999999', locationId: 'warehouse-a' },
+    });
+    useInventoryStore.setState({
+      checkedByAlias: null,
+      locations: [{ id: 'warehouse-a', name: 'Warehouse A', items: [] }],
+      sessionUnknownBarcodes: [{ barcode: '999999999999', locationId: 'warehouse-a' }],
+      unknownBarcodes: [{ barcode: '999999999999', locationId: 'warehouse-a' }],
+    });
+
+    await useInventoryStore.getState().flushUnknownBarcodes('warehouse-a');
+
+    expect(googleSheetsService.appendUnknownBarcodes).toHaveBeenCalledTimes(1);
+    const [sheetId, rows, recordedAt, recordedBy] =
+      (googleSheetsService.appendUnknownBarcodes as jest.Mock).mock.calls[0];
+    expect(sheetId).toBe('test-sheet-id');
+    expect(rows).toEqual([{ location: 'Warehouse A', barcode: '999999999999' }]);
+    expect(recordedAt).toEqual(expect.stringMatching(TIMESTAMP_RE));
+    expect(recordedBy).toBe('Jane Doe');
+    expect(saveUnknownBarcodes).toHaveBeenCalledWith({});
+    expect(useInventoryStore.getState().unknownBarcodes).toEqual([]);
+    expect(useInventoryStore.getState().sessionUnknownBarcodes).toEqual([]);
+  });
+
+  it('clears persisted unknowns without a sheet append when the session has none', async () => {
+    (loadUnknownBarcodes as jest.Mock).mockResolvedValue({
+      '999999999999_warehouse-a': { barcode: '999999999999', locationId: 'warehouse-a' },
+    });
+    useInventoryStore.setState({
+      locations: [{ id: 'warehouse-a', name: 'Warehouse A', items: [] }],
+      sessionUnknownBarcodes: [],
+      unknownBarcodes: [{ barcode: '999999999999', locationId: 'warehouse-a' }],
+    });
+
+    await useInventoryStore.getState().flushUnknownBarcodes('warehouse-a');
+
+    expect(googleSheetsService.appendUnknownBarcodes).not.toHaveBeenCalled();
+    expect(googleAuthService.getDisplayName).not.toHaveBeenCalled();
+    expect(saveUnknownBarcodes).toHaveBeenCalledWith({});
+    expect(useInventoryStore.getState().unknownBarcodes).toEqual([]);
   });
 });
 

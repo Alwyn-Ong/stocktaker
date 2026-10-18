@@ -48,7 +48,7 @@ export default function SettingsScreen({ navigation }: Props) {
           value={alias}
           onChangeText={setAlias}
           onBlur={handleAliasBlur}
-          placeholder="e.g. Warehouse 2"
+          placeholder="alias"
           placeholderTextColor="#aaa"
         />
         <Text style={styles.helperText}>

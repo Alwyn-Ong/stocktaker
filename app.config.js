@@ -1,12 +1,12 @@
 const PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME ?? 'com.anonymous.stocktaker';
 const APP_NAME = process.env.APP_NAME ?? 'Stocktaker';
-const APP_ICON = process.env.APP_ICON ?? './assets/icon.png';
+const APP_ICON = process.env.APP_ICON ?? './assets/logo-override.png';
 
 module.exports = {
   expo: {
     name: APP_NAME,
     slug: 'stocktaker',
-    version: '1.0.0',
+    version: require('./package.json').version,
     orientation: 'portrait',
     icon: APP_ICON,
     userInterfaceStyle: 'light',
@@ -16,9 +16,8 @@ module.exports = {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: '#E6F4FE',
-        foregroundImage: './assets/android-icon-foreground.png',
-        backgroundImage: './assets/android-icon-background.png',
+        backgroundColor: '#1F2933',
+        foregroundImage: './assets/logo-override.png',
         monochromeImage: './assets/android-icon-monochrome.png',
       },
       predictiveBackGestureEnabled: false,
@@ -33,6 +32,7 @@ module.exports = {
       appName: APP_NAME,
       googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID ?? '',
       googleMasterSheetId: process.env.GOOGLE_MASTER_SHEET_ID ?? '',
+      googleReportFolderId: process.env.GOOGLE_REPORT_FOLDER_ID ?? '',
     },
   },
 };

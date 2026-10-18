@@ -31,17 +31,47 @@ type InventoryStore = {
 
   hydrateSettings: () => Promise<void>;
   loadInventory: () => Promise<void>;
-  markDone: (barcode: string, locationId: string) => void;
+  recordScan: (barcode: string, locationId: string) => void;
   recordUnknownBarcode: (barcode: string, locationId: string) => void;
   setCurrentLocation: (id: string) => void;
-  generateReport: () => Promise<void>;
+  generateReport: (locationId: string) => Promise<void>;
+  flushUnknownBarcodes: (locationId: string) => Promise<void>;
 
   connectDrive: () => Promise<void>;
   disconnectDrive: () => Promise<void>;
   setCheckedByAlias: (alias: string) => Promise<void>;
 };
 
-export const useInventoryStore = create<InventoryStore>((set, get) => ({
+export const useInventoryStore = create<InventoryStore>((set, get) => {
+  // Appends the location's session unknown barcodes to the "Unknown Barcodes"
+  // tab, then drops every unknown for that location from state and storage —
+  // once the sheet has them, the app no longer needs to remember them.
+  async function submitLocationUnknowns(locationId: string, recordedAt: string, recordedBy: string): Promise<void> {
+    const { locations, sessionUnknownBarcodes } = get();
+    const unknowns = sessionUnknownBarcodes.filter(u => u.locationId === locationId);
+    if (unknowns.length > 0) {
+      const rows = unknowns.map(u => ({
+        location: locations.find(l => l.id === u.locationId)?.name ?? u.locationId,
+        barcode: u.barcode,
+      }));
+      await googleSheetsService.appendUnknownBarcodes(MASTER_SHEET_ID, rows, recordedAt, recordedBy);
+    }
+
+    const persisted = await loadUnknownBarcodes();
+    for (const key of Object.keys(persisted)) {
+      if (persisted[key].locationId === locationId) delete persisted[key];
+    }
+    await saveUnknownBarcodes(persisted);
+
+    const remainingSession = get().sessionUnknownBarcodes.filter(u => u.locationId !== locationId);
+    set({
+      unknownBarcodes: get().unknownBarcodes.filter(u => u.locationId !== locationId),
+      sessionUnknownBarcodes: remainingSession,
+    });
+    await saveSessionUnknownBarcodes(remainingSession);
+  }
+
+  return {
   locations: [],
   currentLocationId: null,
   loading: false,
@@ -73,10 +103,15 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
       const sessionUnknownBarcodes = await loadSessionUnknownBarcodes();
 
       // Scans not yet confirmed submitted won't show as done on the sheet yet.
-      const pendingKeys = new Set(sessionScans.map(s => makeKey(s.barcode, s.locationId)));
+      const nameById = new Map(locations.map(l => [l.id, l.name]));
+      const pendingByBarcode = new Map(sessionScans.map(s => [s.barcode, s.locationId]));
       for (const loc of locations) {
         for (const item of loc.items) {
-          if (pendingKeys.has(makeKey(item.barcode, loc.id))) item.done = true;
+          const scannedAt = pendingByBarcode.get(item.barcode);
+          if (scannedAt) {
+            item.done = true;
+            item.currentLocation = nameById.get(scannedAt) ?? scannedAt;
+          }
         }
       }
 
@@ -92,31 +127,30 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
     }
   },
 
-  markDone: (barcode: string, locationId: string) => {
-    const loc = get().locations.find(l => l.id === locationId);
-    const item = loc?.items.find(i => i.barcode === barcode);
-    if (!item) return;
+  recordScan: (barcode: string, locationId: string) => {
+    const locations = get().locations;
+    const home = locations.find(l => l.items.some(i => i.barcode === barcode));
+    const item = home?.items.find(i => i.barcode === barcode);
+    if (!home || !item) return;
 
     const sessionScans = get().sessionScans;
-    const pending = sessionScans.some(s => s.barcode === barcode && s.locationId === locationId);
-    if (item.done && !pending) return; // already confirmed on the sheet
+    const pending = sessionScans.some(s => s.barcode === barcode);
+    // A blank Current Location on the sheet means the item hasn't moved.
+    const currentId = item.currentLocation ? googleSheetsService.toLocationId(item.currentLocation) : home.id;
+    if (item.done && currentId === locationId && !pending) return; // already confirmed here on the sheet
 
-    if (!item.done) {
-      const locations = get().locations.map(l => {
-        if (l.id !== locationId) return l;
-        return {
-          ...l,
-          items: l.items.map(i => i.barcode === barcode ? { ...i, done: true } : i),
-        };
-      });
-      set({ locations });
-    }
-
-    if (!pending) {
-      const next = [...sessionScans, { barcode, locationId, name: item.name }];
-      set({ sessionScans: next });
-      saveSessionScans(next);
-    }
+    const scannedName = locations.find(l => l.id === locationId)?.name ?? locationId;
+    const nextLocations = locations.map(l => ({
+      ...l,
+      items: l.items.map(i => i.barcode === barcode ? { ...i, done: true, currentLocation: scannedName } : i),
+    }));
+    // An item can only be in one place: a re-scan elsewhere moves the queued scan.
+    const nextScans = [
+      ...sessionScans.filter(s => s.barcode !== barcode),
+      { barcode, locationId, name: item.name },
+    ];
+    set({ locations: nextLocations, sessionScans: nextScans });
+    saveSessionScans(nextScans);
   },
 
   recordUnknownBarcode: (barcode: string, locationId: string) => {
@@ -136,34 +170,70 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
 
   setCurrentLocation: (id: string) => set({ currentLocationId: id }),
 
-  generateReport: async () => {
-    const { locations, sessionScans, sheetSchema } = get();
+  generateReport: async (locationId: string) => {
+    const { locations, sessionScans, sessionUnknownBarcodes, sheetSchema } = get();
     if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
     if (!sheetSchema) throw new Error('Master sheet schema not loaded; reload before submitting.');
 
-    if (sessionScans.length > 0) {
+    const scans = sessionScans.filter(s => s.locationId === locationId);
+    const unknowns = sessionUnknownBarcodes.filter(u => u.locationId === locationId);
+
+    const updatedAt = formatGMT8();
+    let checkedBy = '';
+    if (scans.length > 0 || unknowns.length > 0) {
       const displayName = await googleAuthService.getDisplayName();
-      const checkedBy = formatCheckedBy(displayName, get().checkedByAlias);
+      checkedBy = formatCheckedBy(displayName, get().checkedByAlias);
       if (!checkedBy) {
         throw new Error('Could not determine signed-in Google account name. Reconnect Google in Settings.');
       }
+    }
 
-      const updatedAt = formatGMT8();
+    if (scans.length > 0) {
+      const locationName = locations.find(l => l.id === locationId)?.name ?? locationId;
       const updates: googleSheetsService.SheetRowUpdate[] = [];
-      for (const scan of sessionScans) {
-        const loc = locations.find(l => l.id === scan.locationId);
-        const item = loc?.items.find(i => i.barcode === scan.barcode);
+      for (const scan of scans) {
+        // The item may belong to another location; its row still gets this
+        // location written as Current Location.
+        const item = locations.flatMap(l => l.items).find(i => i.barcode === scan.barcode);
         if (!item || item.rowIndex == null) {
           throw new Error('Some scanned items could not be matched to a master sheet row; submit aborted.');
         }
-        updates.push({ rowIndex: item.rowIndex, updatedAt, updatedBy: checkedBy });
+        updates.push({ rowIndex: item.rowIndex, updatedAt, updatedBy: checkedBy, currentLocation: locationName });
       }
 
       await googleSheetsService.updateRows(MASTER_SHEET_ID, sheetSchema, updates);
+
+      // Mirror the master sheet locally so the report reflects the just-submitted rows.
+      const submittedBarcodes = new Set(scans.map(s => s.barcode));
+      const syncedLocations = get().locations.map(l => ({
+        ...l,
+        items: l.items.map(i =>
+          submittedBarcodes.has(i.barcode)
+            ? { ...i, done: true, updatedAt, checkedBy, currentLocation: locationName }
+            : i
+        ),
+      }));
+      set({ locations: syncedLocations });
     }
-    set({ sessionScans: [], sessionUnknownBarcodes: [] });
-    await saveSessionScans([]);
-    await saveSessionUnknownBarcodes([]);
+
+    await submitLocationUnknowns(locationId, updatedAt, checkedBy);
+
+    const remainingScans = sessionScans.filter(s => s.locationId !== locationId);
+    set({ sessionScans: remainingScans });
+    await saveSessionScans(remainingScans);
+  },
+
+  flushUnknownBarcodes: async (locationId: string) => {
+    if (!MASTER_SHEET_ID) throw new Error('Google master sheet is not configured.');
+    let checkedBy = '';
+    if (get().sessionUnknownBarcodes.some(u => u.locationId === locationId)) {
+      const displayName = await googleAuthService.getDisplayName();
+      checkedBy = formatCheckedBy(displayName, get().checkedByAlias);
+      if (!checkedBy) {
+        throw new Error('Could not determine signed-in Google account name. Reconnect Google in Settings.');
+      }
+    }
+    await submitLocationUnknowns(locationId, formatGMT8(), checkedBy);
   },
 
   connectDrive: async () => {
@@ -183,4 +253,5 @@ export const useInventoryStore = create<InventoryStore>((set, get) => ({
     await saveSettings({ ...settings, checkedByAlias: trimmed || undefined });
     set({ checkedByAlias: trimmed || null });
   },
-}));
+  };
+});

@@ -5,6 +5,7 @@ import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-ca
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useInventoryStore } from '../store/inventoryStore';
+import { toLocationId } from '../services/googleSheetsService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Scanner'>;
 
@@ -15,7 +16,7 @@ export default function ScannerScreen({ navigation, route }: Props) {
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
   const cooldown = useRef(false);
 
-  const { locations, markDone, recordUnknownBarcode, sessionScans } = useInventoryStore();
+  const { locations, recordScan, recordUnknownBarcode, sessionScans } = useInventoryStore();
   const location = locations.find(l => l.id === locationId);
 
   useEffect(() => {
@@ -35,20 +36,28 @@ export default function ScannerScreen({ navigation, route }: Props) {
 
     if (!location) return;
 
-    const item = location.items.find(i => i.barcode === data);
-    if (!item) {
+    // The barcode may belong to any location, not just the one being scanned.
+    const home = locations.find(l => l.items.some(i => i.barcode === data));
+    const item = home?.items.find(i => i.barcode === data);
+    if (!home || !item) {
       recordUnknownBarcode(data, locationId);
       showToast(`Unknown barcode: ${data}`, '#f44336');
       return;
     }
-    const pending = sessionScans.some(s => s.barcode === data && s.locationId === locationId);
-    if (item.done && !pending) {
+
+    const pending = sessionScans.some(s => s.barcode === data);
+    const currentId = item.currentLocation ? toLocationId(item.currentLocation) : home.id;
+    if (item.done && currentId === locationId && !pending) {
       showToast(`Already scanned: ${item.name}`, '#FF9800');
       return;
     }
 
-    markDone(data, locationId);
-    showToast(`✓ ${item.name}`, '#4CAF50');
+    recordScan(data, locationId);
+    if (home.id !== locationId) {
+      showToast(`✓ ${item.name} — belongs in ${home.name}`, '#FF9800');
+    } else {
+      showToast(`✓ ${item.name}`, '#4CAF50');
+    }
   }
 
   if (!permission) {

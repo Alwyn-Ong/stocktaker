@@ -1,24 +1,26 @@
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import Papa from 'papaparse';
 import { exportReport, serializeReport } from '../csvService';
+import { uploadCsvToFolder } from '../googleDriveService';
 import { Location, UnknownBarcode } from '../../types';
 
-jest.mock('expo-file-system/legacy', () => ({
-  documentDirectory: 'file:///mock-doc-dir/',
-  writeAsStringAsync: jest.fn(),
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: { expoConfig: { extra: { googleReportFolderId: 'test-folder-id' } } },
 }));
 
-jest.mock('expo-sharing', () => ({
-  shareAsync: jest.fn(),
+jest.mock('../googleDriveService', () => ({
+  uploadCsvToFolder: jest.fn(),
 }));
+
+// Pulled in via googleSheetsService (for toLocationId); its native Google
+// Sign-In module doesn't load under Jest.
+jest.mock('../googleAuthService', () => ({}));
 
 jest.mock('../../utils/datetime', () => ({
   formatGMT8: jest.fn(() => '2026-06-21 12:00:00 (UTC+8)'),
 }));
 
-const mockedWriteAsStringAsync = FileSystem.writeAsStringAsync as jest.Mock;
-const mockedShareAsync = Sharing.shareAsync as jest.Mock;
+const mockedUploadCsvToFolder = uploadCsvToFolder as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -34,11 +36,11 @@ function makeLocation(overrides: Partial<Location> = {}): Location {
 }
 
 describe('serializeReport', () => {
-  it('only includes scanned (done) items, headed by an Items Present row', () => {
+  it('groups items under a location header and lists both checked and unchecked items', () => {
     const locations: Location[] = [
       makeLocation({
         items: [
-          { barcode: '012345', name: 'Widget', description: '', done: true },
+          { barcode: '012345', name: 'Widget', description: '', done: true, checkedBy: 'Alex', updatedAt: '2026-06-21 10:00:00' },
           { barcode: '012346', name: 'Widget Two', description: '', done: false },
         ],
       }),
@@ -46,9 +48,88 @@ describe('serializeReport', () => {
 
     const parsed = Papa.parse<string[]>(serializeReport(locations));
 
-    expect(parsed.data[0]).toEqual(['Items Present']);
-    expect(parsed.data[1]).toEqual(['Location', 'Barcode', 'Item Name', 'Description']);
-    expect(parsed.data[2]).toEqual(['Warehouse A', '012345', 'Widget', '']);
+    expect(parsed.data[0]).toEqual(['Warehouse A']);
+    expect(parsed.data[1]).toEqual(['Barcode', 'Item Name', 'Description', 'Current Location', 'Status', 'Updated At', 'Checked By']);
+    expect(parsed.data[2]).toEqual(['012345', 'Widget', '', '', 'Checked', '2026-06-21 10:00:00', 'Alex']);
+    expect(parsed.data[3]).toEqual(['012346', 'Widget Two', '', '', 'Unchecked', '', '']);
+  });
+
+  it('includes the item current location when set', () => {
+    const locations: Location[] = [
+      makeLocation({
+        items: [{ barcode: '012345', name: 'Widget', description: '', done: true, checkedBy: 'Alex', updatedAt: '2026-06-21 10:00:00', currentLocation: 'Warehouse B' }],
+      }),
+    ];
+
+    const parsed = Papa.parse<string[]>(serializeReport(locations));
+
+    expect(parsed.data[2]).toEqual(['012345', 'Widget', '', 'Warehouse B', 'Checked', '2026-06-21 10:00:00', 'Alex']);
+  });
+
+  it('falls back to the report checked-by for checked items with no per-item checker', () => {
+    const locations: Location[] = [
+      makeLocation({
+        items: [{ barcode: '012345', name: 'Widget', description: '', done: true, updatedAt: '2026-06-21 10:00:00' }],
+      }),
+    ];
+
+    const parsed = Papa.parse<string[]>(serializeReport(locations, [], 'Jane Doe'));
+
+    expect(parsed.data[2]).toEqual(['012345', 'Widget', '', '', 'Checked', '2026-06-21 10:00:00', 'Jane Doe']);
+  });
+
+  it('keeps a scanned-but-unsubmitted item Unchecked with no timestamp', () => {
+    const locations: Location[] = [
+      makeLocation({
+        items: [{ barcode: '012345', name: 'Widget', description: '', done: true }],
+      }),
+    ];
+
+    const parsed = Papa.parse<string[]>(serializeReport(locations, [], 'Jane Doe'));
+
+    expect(parsed.data[2]).toEqual(['012345', 'Widget', '', '', 'Unchecked', '', '']);
+  });
+
+  it('appends a belong-elsewhere section for items from other locations currently here', () => {
+    const locations: Location[] = [makeLocation()];
+    const allLocations: Location[] = [
+      ...locations,
+      makeLocation({
+        id: 'warehouse-b',
+        name: 'Warehouse B',
+        items: [
+          { barcode: '0777', name: 'Stray', description: 'Misplaced widget', done: true, checkedBy: 'Alex', updatedAt: '2026-06-21 10:00:00', currentLocation: 'Warehouse A' },
+          { barcode: '0778', name: 'Homebody', description: '', done: false, currentLocation: 'Warehouse B' },
+        ],
+      }),
+    ];
+
+    const parsed = Papa.parse<string[]>(serializeReport(locations, [], '', allLocations));
+
+    expect(parsed.data).toEqual(
+      expect.arrayContaining([
+        ['Items currently here - belong elsewhere'],
+        ['Barcode', 'Item Name', 'Description', 'Belongs In', 'Status', 'Updated At', 'Checked By'],
+        ['0777', 'Stray', 'Misplaced widget', 'Warehouse B', 'Checked', '2026-06-21 10:00:00', 'Alex'],
+      ])
+    );
+    expect(parsed.data).not.toEqual(expect.arrayContaining([expect.arrayContaining(['0778'])]));
+  });
+
+  it('omits the belong-elsewhere section when no other items are currently here', () => {
+    const locations: Location[] = [makeLocation()];
+    const allLocations: Location[] = [
+      ...locations,
+      makeLocation({
+        id: 'warehouse-b',
+        name: 'Warehouse B',
+        items: [{ barcode: '0778', name: 'Homebody', description: '', done: false, currentLocation: 'Warehouse B' }],
+      }),
+    ];
+
+    const csv = serializeReport(locations, [], '', allLocations);
+
+    expect(csv).not.toContain('belong elsewhere');
   });
 
   it('appends an unknown-barcodes section when unknown barcodes are present', () => {
@@ -75,14 +156,15 @@ describe('serializeReport', () => {
     expect(csv).not.toContain('Unknown barcodes');
   });
 
-  it('appends a footer with the checked-by name and a GMT+8 timestamp', () => {
+  it('appends a footer with the generator and a GMT+8 timestamp', () => {
     const locations: Location[] = [makeLocation()];
 
-    const parsed = Papa.parse<string[]>(serializeReport(locations, [], 'Jane Doe'));
+    const parsed = Papa.parse<string[]>(serializeReport(locations, [], 'Jane Doe (Warehouse A)'));
 
     expect(parsed.data).toEqual(
       expect.arrayContaining([
-        ['Checked by: Jane Doe'],
+        ['Generated by:'],
+        ['Jane Doe (Warehouse A)'],
         ['2026-06-21 12:00:00 (UTC+8)'],
       ])
     );
@@ -90,22 +172,24 @@ describe('serializeReport', () => {
 });
 
 describe('exportReport', () => {
-  it('writes the report CSV and shares it', async () => {
+  it('uploads the report CSV to the configured Drive folder', async () => {
     const locations: Location[] = [
       makeLocation({
-        items: [{ barcode: '012345', name: 'Widget', description: 'A small widget', done: true }],
+        items: [{ barcode: '012345', name: 'Widget', description: 'A small widget', done: true, checkedBy: 'Jane Doe', updatedAt: '2026-06-21 10:00:00' }],
       }),
     ];
 
     await exportReport(locations, [], 'Jane Doe');
 
-    expect(mockedWriteAsStringAsync).toHaveBeenCalledTimes(1);
-    const [, csvContent] = mockedWriteAsStringAsync.mock.calls[0];
-    const parsed = Papa.parse<string[]>(csvContent as string);
+    expect(mockedUploadCsvToFolder).toHaveBeenCalledTimes(1);
+    const [folderId, fileName, csvContent] = mockedUploadCsvToFolder.mock.calls[0];
 
-    expect(parsed.data[0]).toEqual(['Items Present']);
-    expect(parsed.data[1]).toEqual(['Location', 'Barcode', 'Item Name', 'Description']);
-    expect(parsed.data[2]).toEqual(['Warehouse A', '012345', 'Widget', 'A small widget']);
-    expect(mockedShareAsync).toHaveBeenCalledTimes(1);
+    expect(folderId).toBe('test-folder-id');
+    expect(fileName).toBe('Warehouse A - 2026-06-21 12:00:00 (UTC+8).csv');
+
+    const parsed = Papa.parse<string[]>(csvContent as string);
+    expect(parsed.data[0]).toEqual(['Warehouse A']);
+    expect(parsed.data[1]).toEqual(['Barcode', 'Item Name', 'Description', 'Current Location', 'Status', 'Updated At', 'Checked By']);
+    expect(parsed.data[2]).toEqual(['012345', 'Widget', 'A small widget', '', 'Checked', '2026-06-21 10:00:00', 'Jane Doe']);
   });
 });

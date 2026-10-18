@@ -3,7 +3,14 @@ import Constants from 'expo-constants';
 
 const IOS_CLIENT_ID = Constants.expoConfig?.extra?.googleIosClientId || undefined;
 
-const SCOPES = ['email', 'profile', 'https://www.googleapis.com/auth/spreadsheets'];
+const SCOPES = [
+  'email',
+  'profile',
+  'https://www.googleapis.com/auth/spreadsheets',
+  // Full Drive scope (not drive.file): the report folder is created by hand in
+  // Drive, and drive.file can only touch files/folders the app itself created.
+  'https://www.googleapis.com/auth/drive',
+];
 
 GoogleSignin.configure({
   scopes: SCOPES,

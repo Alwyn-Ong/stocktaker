@@ -40,8 +40,10 @@ yarn-error.*
 /ios
 /android
 
-# assets
-assets
+# private branding (see scripts/apply-branding.sh) and Windows download markers
+branding/
+*:Zone.Identifier
+*.pptx
 
 # IDE
 .idea

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- `README.md` with setup, Google Cloud/master-sheet requirements, and build instructions.
+- `scripts/apply-branding.sh`: copies private artwork from the gitignored `branding/` directory over the placeholder icons in `assets/` (marking them `skip-worktree` so they can't be committed), with `--undo` to restore.
+
+### Changed
+- Repo prepared for public release: `assets/` is no longer gitignored and holds generic placeholder icons (private artwork lives in `branding/`); `app.config.js` defaults `APP_NAME` to `Stocktaker`; `LICENSE` copyright updated; personal paths, email and Drive folder id removed from `ANDROID_DEV.md`/`RELEASE.md`; `.gitignore` now ignores `branding/`, `*.pptx` and `*:Zone.Identifier` files.
+
 ## 1.1.0 — 2026-07-09
 
 ### Added

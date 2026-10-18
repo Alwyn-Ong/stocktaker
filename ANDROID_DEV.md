@@ -4,7 +4,7 @@ This project is developed from WSL2. The Windows-side Android SDK at `/mnt/d/and
 does NOT work for local builds here — `sdkmanager`/Gradle can't parse its package
 metadata correctly over the DrvFs mount (fails with `Failed to find target with hash
 string 'android-36'`). A separate Linux-native SDK lives at `~/Android/Sdk` instead, used
-via `android/local.properties` (`sdk.dir=$HOME/Android/Sdk`).
+via `android/local.properties` (`sdk.dir=/home/<you>/Android/Sdk` — gradle needs an absolute path).
 
 ## One-time setup (already done)
 
@@ -39,7 +39,6 @@ Expo Go can't be used — the project's Expo SDK version is newer than what's pu
 on the Play Store, so it must run via a local dev-client build instead.
 
 ```bash
-cd ~/code/stocktaker
 ANDROID_HOME=$HOME/Android/Sdk PATH="$HOME/Android/Sdk/platform-tools:$PATH" npx expo run:android
 ```
 
